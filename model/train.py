@@ -7,7 +7,7 @@ __author__ = 'Taneem Jan, taneemishere.github.io'
 
 import tensorflow as tf
 
-sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(log_device_placement=True))
 
 import sys
 from classes.dataset.Generator import *
@@ -29,7 +29,7 @@ def run(input_path, output_path, train_autoencoder=False):
 
     input_shape = dataset.input_shape
     output_size = dataset.output_size
-    steps_per_epoch = dataset.size / BATCH_SIZE
+    steps_per_epoch = int(dataset.size / BATCH_SIZE)
 
     voc = Vocabulary()
     voc.retrieve(output_path)

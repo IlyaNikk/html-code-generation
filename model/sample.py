@@ -10,6 +10,7 @@ import sys
 from os.path import basename
 from classes.Sampler import *
 from classes.model.Main_Model import *
+import tensorflow as tf
 
 argv = sys.argv[1:]
 
@@ -26,6 +27,7 @@ else:
     search_method = "greedy" if len(argv) < 5 else argv[4]
 
 meta_dataset = np.load("{}/meta_dataset.npy".format(trained_weights_path), allow_pickle=True)
+print("meta_dataset: ", meta_dataset)
 input_shape = meta_dataset[0]
 output_size = meta_dataset[1]
 
@@ -35,7 +37,10 @@ model.load(trained_model_name)
 sampler = Sampler(trained_weights_path, input_shape, output_size, CONTEXT_LENGTH)
 
 file_name = basename(input_path)[:basename(input_path).find(".")]
-evaluation_img = Utils.get_preprocessed_img(input_path, IMAGE_SIZE)
+img = tf.keras.utils.load_img(
+    input_path, target_size=(IMAGE_SIZE, IMAGE_SIZE)
+)
+evaluation_img = tf.keras.utils.img_to_array(img)
 
 if search_method == "greedy":
     result, _ = sampler.predict_greedy(model, np.array([evaluation_img]))

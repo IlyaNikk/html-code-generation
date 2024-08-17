@@ -5,9 +5,9 @@ __author__ = 'Taneem Jan, taneemishere.github.io'
 
 
 import numpy as np
-from model.classes.dataset.Dataset import *
-from model.classes.Vocabulary import *
-from model.classes.model.Config import *
+from ..dataset.Dataset import *
+from ..Vocabulary import *
+from ..model.Config import *
 
 
 class Generator:
@@ -72,7 +72,7 @@ class Generator:
                         if images_only:
                             yield (batch_input_images, batch_input_images)
                         else:
-                            yield ([batch_input_images, batch_partial_sequences], batch_next_words)
+                            yield ((batch_input_images, batch_partial_sequences), batch_next_words)
 
                         batch_input_images = []
                         batch_partial_sequences = []

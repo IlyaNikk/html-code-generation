@@ -1,6 +1,7 @@
 # Modified version
 __author__ = 'Taneem Jan, taneemishere.github.io'
 
+import keras.src.callbacks
 from keras.layers import Input, Dense, Dropout, RepeatVector, LSTM, concatenate, Flatten
 from keras.models import Sequential, Model
 from tensorflow.keras.optimizers import RMSprop
@@ -13,14 +14,14 @@ from .autoencoder_image import *
 class Main_Model(AModel):
     def __init__(self, input_shape, output_size, output_path):
         AModel.__init__(self, input_shape, output_size, output_path)
-        self.name = "Main_Model"
+        self.name = "Main_Model.weights"
 
         visual_input = Input(shape=input_shape)
 
         # Load the pre-trained autoencoder model
         autoencoder_model = autoencoder_image(input_shape, input_shape, output_path)
-        autoencoder_model.load('autoencoder')
-        autoencoder_model.model.load_weights('../bin/autoencoder.h5')
+        autoencoder_model.load('autoencoder.weights')
+        autoencoder_model.model.load_weights('../bin/autoencoder.weights.h5')
 
         hidden_layer_model_freeze = Model(inputs=autoencoder_model.model.input,
                                           outputs=autoencoder_model.model.get_layer('encoded_layer').output)
@@ -54,16 +55,25 @@ class Main_Model(AModel):
 
         self.model = Model(inputs=[visual_input, textual_input], outputs=decoder)
 
-        optimizer = RMSprop(lr=0.0001, clipvalue=1.0)
+        optimizer = RMSprop(learning_rate=0.0001, clipvalue=1.0)
         self.model.compile(loss='categorical_crossentropy', optimizer=optimizer)
 
     def fit_generator(self, generator, steps_per_epoch):
         self.model.summary()
-        self.model.fit_generator(generator, steps_per_epoch=steps_per_epoch, epochs=EPOCHS, verbose=1)
+        file_name = "autoencoder_main_model_checkpoint_" + datetime.datetime.now().strftime("%d_%m_%Y_%H_%M") + ".weights"
+        checkpoint_filepath = "{}/{}.h5".format(self.output_path, file_name)
+        model_checkpoint_callback = keras.src.callbacks.ModelCheckpoint(
+            filepath=checkpoint_filepath,
+            save_weights_only=True,
+            monitor='val_loss',
+            verbose=1,
+            save_freq='epoch'
+        )
+        self.model.fit(generator, steps_per_epoch=steps_per_epoch, epochs=EPOCHS, verbose=1, callbacks=[model_checkpoint_callback])
         self.save()
 
     def predict(self, image, partial_caption):
-        return self.model.predict([image, partial_caption], verbose=0)[0]
+        return self.model.predict((image, partial_caption), verbose=0)[0]
 
     def predict_batch(self, images, partial_captions):
-        return self.model.predict([images, partial_captions], verbose=1)
+        return self.model.predict((images, partial_captions), verbose=1)
