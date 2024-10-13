@@ -1,7 +1,7 @@
 gradio~=3.0.20
-keras~=2.8.0
-numpy~=1.21.5
-tensorflow
+keras==3.4.0
+numpy~=1.23.5
+tensorflow==2.17.0
 opencv-python~=4.5.5
 nltk~=3.6.7
 

@@ -1,5 +1,7 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from difflib import SequenceMatcher
+import glob
 
 # Modified version
 __author__ = 'Taneem Jan, taneemishere.github.io'
@@ -36,15 +38,28 @@ model.load(trained_model_name)
 
 sampler = Sampler(trained_weights_path, input_shape, output_size, CONTEXT_LENGTH)
 
-file_name = basename(input_path)[:basename(input_path).find(".")]
-img = tf.keras.utils.load_img(
-    input_path, target_size=(IMAGE_SIZE, IMAGE_SIZE)
-)
-evaluation_img = tf.keras.utils.img_to_array(img)
+all_image_files = glob.glob(input_path + '/*.png')
+all_gui_files = glob.glob(input_path + '/*.gui')
+sum_sequence_ratio = [];
 
-if search_method == "greedy":
-    result, _ = sampler.predict_greedy(model, np.array([evaluation_img]))
-    print("Result greedy: {}".format(result))
+for file in all_image_files:
+    file_name_img = basename(file)[:basename(file).find(".")]
+    img = tf.keras.utils.load_img(
+        file, target_size=(IMAGE_SIZE, IMAGE_SIZE)
+    )
+    evaluation_img = tf.keras.utils.img_to_array(img)
 
-with open("{}/{}.gui".format(output_path, file_name), 'w') as out_f:
-    out_f.write(result.replace(START_TOKEN, "").replace(END_TOKEN, ""))
+    if search_method == "greedy":
+        result, _ = sampler.predict_greedy(model, np.array([evaluation_img]))
+        # print("Result greedy: {}".format(result))
+
+    print(file_name_img)
+    correct_result = open(input_path + '/' + file_name_img +'.gui', 'r').read()
+    current_seq = SequenceMatcher(None, result, correct_result)
+    sum_sequence_ratio.append(current_seq.ratio())
+    # print(sum_sequence_ratio)
+
+# with open("{}/{}.gui".format(output_path, file_name), 'w') as out_f:
+#     out_f.write(result.replace(START_TOKEN, "").replace(END_TOKEN, ""))
+average = sum(sum_sequence_ratio) / len(sum_sequence_ratio)
+print('Error result: ' + str(average))

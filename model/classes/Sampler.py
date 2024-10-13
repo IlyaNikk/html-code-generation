@@ -5,7 +5,7 @@ __author__ = 'Taneem Jan, taneemishere.github.io'
 
 from .Vocabulary import *
 from .Utils import *
-
+import tensorflow as tf
 
 class Sampler:
     def __init__(self, voc_path, input_shape, output_size, context_length):
@@ -35,7 +35,8 @@ class Sampler:
                 print("predicting {}/{}...".format(i, sequence_length))
 
             probas = model.predict(input_img, np.array([current_context]))
-            prediction = np.argmax(probas)
+            prediction = np.argmax(tf.nn.softmax(probas))
+
             out_probas.append(probas)
 
             new_context = []

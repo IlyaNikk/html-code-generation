@@ -4,9 +4,9 @@ __author__ = 'Taneem Jan, taneemishere.github.io'
 
 
 import os
-from model.classes.Vocabulary import *
-from model.classes.Utils import *
-from model.classes.model.Config import *
+from ..Vocabulary import *
+from ..Utils import *
+from ..model.Config import *
 
 
 class Dataset:

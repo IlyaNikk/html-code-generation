@@ -10,14 +10,18 @@ class AModel:
         self.output_size = output_size
         self.output_path = output_path
         self.name = ""
+        print("initial name: "  + self.name)
 
     def save(self):
         model_json = self.model.to_json()
         with open("{}/{}.json".format(self.output_path, self.name), "w") as json_file:
             json_file.write(model_json)
+        print("outputpath: " + self.output_path)
+        print("name: " + self.name)
         self.model.save_weights("{}/{}.h5".format(self.output_path, self.name))
 
     def load(self, name=""):
+        print("load name: " + name)
         output_name = self.name if name == "" else name
         with open("{}/{}.json".format(self.output_path, output_name), "r") as json_file:
             loaded_model_json = json_file.read()
