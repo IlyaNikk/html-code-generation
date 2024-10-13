@@ -57,6 +57,4 @@ class Sampler:
             if self.voc.token_lookup[prediction] == END_TOKEN:
                 break
 
-        # print("predictions: ", predictions)
-        # print("out_probase: ", out_probas)
         return predictions, out_probas

@@ -78,8 +78,6 @@ class Main_Model(AModel):
         # loss, acc = self.model.evaluate(generator)
         # print("Restored model, accuracy: {:5.2f}%".format(100 * acc))
 
-        print(steps_per_epoch)
-        print(validation_steps)
         history = self.model.fit(
             generator,
             validation_data=validation_generator,

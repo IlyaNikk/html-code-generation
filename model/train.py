@@ -43,9 +43,6 @@ def run(input_path, input_validation_path, output_path, train_autoencoder=False)
     gui_validation_paths, img_validation_paths = Dataset.load_paths_only(input_validation_path)
     input_validation_shape = validation_dataset.input_shape
 
-    print(len(gui_validation_paths), len(img_validation_paths))
-    print(len(gui_paths), len(img_paths))
-
     validation_steps = int(validation_dataset.size / BATCH_SIZE)
 
     validation_generator = Generator.data_generator(

@@ -37,10 +37,6 @@ for f in os.listdir(input_path):
 evaluation_samples_number = len(paths) / (distribution + 1)
 training_samples_number = evaluation_samples_number * distribution
 
-print(training_samples_number)
-print(evaluation_samples_number)
-print(len(paths))
-
 assert training_samples_number + evaluation_samples_number == len(paths)
 
 print("Splitting datasets, training samples: {}, evaluation samples: {}".format(training_samples_number, evaluation_samples_number))
@@ -80,8 +76,6 @@ for path in paths:
 
         hashes.append(content_hash)
 
-print(len(eval_set))
-print(evaluation_samples_number)
 assert len(eval_set) == evaluation_samples_number
 assert len(train_set) == training_samples_number
 
