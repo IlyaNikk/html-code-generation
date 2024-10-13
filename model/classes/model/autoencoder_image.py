@@ -64,7 +64,7 @@ class autoencoder_image(AModel):
 			verbose=1,
 			save_freq='epoch'
 		)
-		self.model.fit(generator, steps_per_epoch=steps_per_epoch, epochs=EPOCHS, verbose=1, callbacks=[model_checkpoint_callback])
+		self.model.fit(generator, steps_per_epoch=steps_per_epoch, epochs=4, verbose=1, callbacks=[model_checkpoint_callback])
 		self.save()
 
 	def predict_hidden(self, images):

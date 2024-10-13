@@ -17,7 +17,7 @@ from keras.backend import clear_session
 
 
 # removed some training parameters, to make the code input easier
-def run(input_path, output_path, train_autoencoder=False):
+def run(input_path, input_validation_path, output_path, train_autoencoder=False):
     np.random.seed(1234)
 
     dataset = Dataset()
@@ -37,6 +37,26 @@ def run(input_path, output_path, train_autoencoder=False):
     generator = Generator.data_generator(voc, gui_paths, img_paths, batch_size=BATCH_SIZE, input_shape=input_shape,
                                          generate_binary_sequences=True)
 
+    validation_dataset = Dataset()
+    validation_dataset.load(input_validation_path, generate_binary_sequences=True)
+
+    gui_validation_paths, img_validation_paths = Dataset.load_paths_only(input_validation_path)
+    input_validation_shape = validation_dataset.input_shape
+
+    print(len(gui_validation_paths), len(img_validation_paths))
+    print(len(gui_paths), len(img_paths))
+
+    validation_steps = int(validation_dataset.size / BATCH_SIZE)
+
+    validation_generator = Generator.data_generator(
+        voc,
+        gui_validation_paths,
+        img_validation_paths,
+        batch_size=BATCH_SIZE,
+        input_shape=input_validation_shape,
+        generate_binary_sequences=True
+    )
+
     # Included a generator for images only as an input for autoencoders
     generator_images = Generator.data_generator(voc, gui_paths, img_paths, batch_size=BATCH_SIZE,
                                                 input_shape=input_shape, generate_binary_sequences=True,
@@ -50,7 +70,7 @@ def run(input_path, output_path, train_autoencoder=False):
 
     # Training of our main-model
     model = Main_Model(input_shape, output_size, output_path)
-    model.fit_generator(generator, steps_per_epoch=steps_per_epoch)
+    model.fit_generator(generator, validation_generator, steps_per_epoch=steps_per_epoch, validation_steps=validation_steps)
 
 
 if __name__ == "__main__":
@@ -62,7 +82,8 @@ if __name__ == "__main__":
         exit(0)
     else:
         input_path = argv[0]
-        output_path = argv[1]
-        train_autoencoder = False if len(argv) < 3 else True if int(argv[2]) == 1 else False
+        input_validation_path = argv[1]
+        output_path = argv[2]
+        train_autoencoder = False if len(argv) < 4 else True if int(argv[3]) == 1 else False
 
-    run(input_path, output_path, train_autoencoder=train_autoencoder)
+    run(input_path, input_validation_path, output_path, train_autoencoder=train_autoencoder)

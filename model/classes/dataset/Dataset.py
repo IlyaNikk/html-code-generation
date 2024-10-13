@@ -40,6 +40,8 @@ class Dataset:
                     path_img = "{}/{}.npz".format(path, file_name)
                     img_paths.append(path_img)
 
+        print(len(gui_paths))
+        print(len(img_paths))
         assert len(gui_paths) == len(img_paths)
         return gui_paths, img_paths
 

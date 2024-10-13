@@ -30,8 +30,6 @@ class Sampler:
         predictions = START_TOKEN
         out_probas = []
 
-        print("model: ", model)
-        print(self.voc.token_lookup)
         for i in range(0, sequence_length):
             if verbose:
                 print("predicting {}/{}...".format(i, sequence_length))
@@ -39,7 +37,6 @@ class Sampler:
             probas = model.predict(input_img, np.array([current_context]))
             prediction = np.argmax(tf.nn.softmax(probas))
 
-        # print("probas: ", probas)
             out_probas.append(probas)
 
             new_context = []
@@ -55,12 +52,11 @@ class Sampler:
 
             current_context = new_context
 
-            print("prediction: ", prediction)
             predictions += self.voc.token_lookup[prediction]
 
             if self.voc.token_lookup[prediction] == END_TOKEN:
                 break
 
-        print("predictions: ", predictions)
-        print("out_probase: ", out_probas)
+        # print("predictions: ", predictions)
+        # print("out_probase: ", out_probas)
         return predictions, out_probas

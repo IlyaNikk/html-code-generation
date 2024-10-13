@@ -4,11 +4,12 @@ __author__ = 'Taneem Jan, taneemishere.github.io'
 import keras.src.callbacks
 from keras.layers import Input, Dense, Dropout, RepeatVector, LSTM, concatenate, Flatten
 from keras.models import Sequential, Model
-from tensorflow.keras.optimizers import RMSprop
+import tensorflow as tf
 from keras import *
 from .Config import *
 from .AModel import *
 from .autoencoder_image import *
+import matplotlib.pyplot as plt
 
 
 class Main_Model(AModel):
@@ -54,11 +55,13 @@ class Main_Model(AModel):
         decoder = Dense(output_size, activation='softmax')(decoder)
 
         self.model = Model(inputs=[visual_input, textual_input], outputs=decoder)
+        optimizer = tf.keras.optimizers.RMSprop(learning_rate=0.0001, clipvalue=1.0)
+        self.model.compile(
+            loss='categorical_crossentropy',
+            optimizer=optimizer,
+            metrics=['accuracy'])
 
-        optimizer = RMSprop(learning_rate=0.0001, clipvalue=1.0)
-        self.model.compile(loss='categorical_crossentropy', optimizer=optimizer)
-
-    def fit_generator(self, generator, steps_per_epoch):
+    def fit_generator(self, generator, validation_generator, steps_per_epoch, validation_steps):
         self.model.summary()
         file_name = "autoencoder_main_model_checkpoint_" + datetime.datetime.now().strftime("%d_%m_%Y_%H_%M") + ".weights"
         checkpoint_filepath = "{}/{}.h5".format(self.output_path, file_name)
@@ -69,11 +72,50 @@ class Main_Model(AModel):
             verbose=1,
             save_freq='epoch'
         )
-        self.model.fit(generator, steps_per_epoch=steps_per_epoch, epochs=EPOCHS, verbose=1, callbacks=[model_checkpoint_callback])
+
+        checkpoint_file_name = "{}/{}.h5".format(self.output_path, self.name)
+        self.model.load_weights(checkpoint_file_name)
+        # loss, acc = self.model.evaluate(generator)
+        # print("Restored model, accuracy: {:5.2f}%".format(100 * acc))
+
+        print(steps_per_epoch)
+        print(validation_steps)
+        history = self.model.fit(
+            generator,
+            validation_data=validation_generator,
+            steps_per_epoch=steps_per_epoch,
+            validation_steps=validation_steps,
+            epochs=EPOCHS,
+            verbose=1,
+            callbacks=[model_checkpoint_callback])
         self.save()
+        self.visualizeReult(history)
 
     def predict(self, image, partial_caption):
         return self.model.predict((image, partial_caption), verbose=0)[0]
 
     def predict_batch(self, images, partial_captions):
         return self.model.predict((images, partial_captions), verbose=1)
+
+    def visualizeReult(self, history):
+        acc = history .history['accuracy']
+        val_acc = history.history['val_accuracy']
+
+        loss = history.history['loss']
+        val_loss = history.history['val_loss']
+
+        epochs_range = range(EPOCHS)
+
+        plt.figure(figsize=(8, 8))
+        plt.subplot(1, 2, 1)
+        plt.plot(epochs_range, acc, label='Training Accuracy')
+        plt.plot(epochs_range, val_acc, label='Validation Accuracy')
+        plt.legend(loc='lower right')
+        plt.title('Training and Validation Accuracy')
+
+        plt.subplot(1, 2, 2)
+        plt.plot(epochs_range, loss, label='Training Loss')
+        plt.plot(epochs_range, val_loss, label='Validation Loss')
+        plt.legend(loc='upper right')
+        plt.title('Training and Validation Loss')
+        plt.show()
