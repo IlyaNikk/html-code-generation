@@ -1,13 +1,11 @@
 import sys
 import os
 import re
-import struct
 
 import tensorflow as tf
 import numpy as np
 
 from PIL import Image
-from PIL.PngImagePlugin import PngInfo
 from playwright.sync_api import sync_playwright
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -16,7 +14,6 @@ sys.path.append(parent_dir)
 from model.classes.Sampler import *
 from model.classes.model.Main_Model import *
 from compiler.classes.Compiler import *
-from compiler.classes.Utils import *
 
 TEXT_PLACE_HOLDER = "[]"
 
@@ -34,23 +31,24 @@ def render_content_with_text(key, value):
 
 argv = sys.argv[1:]
 
-if len(argv) < 3:
+if len(argv) < 4:
     print("Error")
     exit(0)
 else:
     trained_weights_path = argv[0]
     trained_model_name = argv[1]
     input_path = argv[2]
+    save_images = False if len(argv) < 4 else True if int(argv[3]) == 1 else False
 
 files = os.listdir(input_path)
-# html_files = filter(lambda s: re.search(".*\\.html$", s), files)
-# png_files = filter(lambda s: re.search(".*\\.png$", s), files)
-#
-# if len(html_files) != len(png_files):
-#     print("Error")
-#     exit(0)
+gui_files = list(filter(lambda s: re.search(".*\\.gui$", s), files))
+png_files = list(filter(lambda s: re.search(".*\\.png$", s), files))
 
-html_files = ['0CC0512B-11C5-481C-BC81-534F1FC9EC0A.gui']
+if len(gui_files) != len(png_files):
+    print("Error")
+    exit(0)
+
+gui_files = gui_files[:10]
 
 # load model params
 meta_dataset = np.load("{}/meta_dataset.npy".format(trained_weights_path), allow_pickle=True)
@@ -65,17 +63,10 @@ sampler = Sampler(trained_weights_path, input_shape, output_size, CONTEXT_LENGTH
 dsl_path = "../compiler/assets/web-dsl-mapping.json"
 compiler = Compiler(dsl_path)
 
-for file in html_files:
+for file in gui_files:
     file_name = file.replace(".gui", "")
-    master_gui = open(file, 'r').read()
+    master_gui = open("{}/{}".format(input_path, file), 'r').read()
     master_gui = master_gui.replace(START_TOKEN, "").replace(END_TOKEN, "")
-
-# get diff between images
-    # diff_array = img1_array - img2_array
-
-    # print(np.sum(np.abs(diff_array)))
-    # print(np.sum(np.abs(img1_array)))
-    # print('diff {}'.format(np.sum(np.abs(diff_array)) * 100 / np.sum(np.abs(img1_array))))
 
     img = tf.keras.utils.load_img(
         "{}/{}.png".format(input_path, file_name), target_size=(IMAGE_SIZE, IMAGE_SIZE)
@@ -91,12 +82,11 @@ for file in html_files:
     with sync_playwright() as p:
         browser = p.webkit.launch()
         page = browser.new_page()
-        # брать html и брать новый html
+        #
         page.set_viewport_size({"width": 1280, "height": 986})
         page.set_content(master_html, wait_until="load")
         page.screenshot(path='master_screenshot.png')
 
-        # page.set_viewport_size({"width": 1280, "height": 986})
         page.set_content(compiled_after_prediction_html, wait_until="load")
         page.screenshot(path='prediction_screenshot.png')
         browser.close()
@@ -116,11 +106,13 @@ for file in html_files:
     html_prediction_screenshot_array = np.float32(html_prediction_screenshot)
     html_prediction_screenshot_array_color = np.uint8(html_prediction_screenshot_array)
 
-    diff_master_and_prediction = np.subtract(html_master_screenshot_array_color ,html_prediction_screenshot_array_color)
+    diff_master_and_prediction = np.subtract(html_master_screenshot_array_color, html_prediction_screenshot_array_color)
 
-    print('diff {}'.format(np.sum(np.abs(diff_master_and_prediction)) * 100 / np.sum(np.abs(html_prediction_screenshot_array_color))))
+    diff_percentage = (np.sum(np.abs(diff_master_and_prediction)) * 100
+                       / np.sum(np.abs(html_prediction_screenshot_array_color)))
+    print('diff for {}: {}'.format(file_name, diff_percentage))
 
     # save diff as image (optional)
     diff = Image.fromarray(diff_master_and_prediction, 'RGB')
-    diff.save('diff.png')
-    diff.show()
+    if save_images:
+        diff.save('diff_{}.png'.format(file_name))

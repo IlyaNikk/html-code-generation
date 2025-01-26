@@ -2,10 +2,7 @@
 
 Writing code in a programming language for a designed graphical user interface created by, is done mostly by developers to build and develop custom websites and software. The development work is not approachable by those unfamiliar with programming, to drive these personas capable of developing the code bases we come up with an automated system. Here we proposed that methods of deep learning and computer vision techniques can be grasped to train a model that will automatically generate HTML codes from a single input mockup image and try to build an end-to-end automated system with a good amount of accuracy over the dataset the model is trained, for developing web pages.
 
-The research work and project is done in my undergrad thesis, you can find it here on [my site](https://taneemishere.github.io/projects/project-one.html).
-
-> Live Demo: [Hugging Face Space](https://huggingface.co/spaces/taneemishere/html-code-generation-from-images-with-deep-neural-networks)
-
+The research work and project is done in my undergrad thesis&
 ## The Architecture
 
 ![Architecture](https://raw.githubusercontent.com/taneemishere/html-code-generation-from-images-with-deep-neural-networks/main/resources-for-md/model-architecture.png)
@@ -105,8 +102,19 @@ cd compiler
 ./web-compiler.py ../generated-output/dot_gui.file
 ```
 
+
+> Functional Tests
+
+To check if model works correctly, there are functional tests, that check final result of model with initial dataset 
+
+```
+cd tests
+
+# iterate over all gui/png pair to check the correctness of prediction model
+# usage: functional-test.py <trained weights path> <trained model name> <input folder path>.gui <save diff image>
+./functional-test.py ../bin/web Main_Model.weights ../datasets 1
+```
+
 ### Acknowledgement
 
 - This project is done on top of the original work by Tony Beltramelli's [Paper](https://arxiv.org/pdf/1705.07962.pdf) and the [Datasets](https://github.com/tonybeltramelli/pix2code/tree/master/datasets) from him.
-
-- 👍 Contribution and suggestions are encouraged! just by dropping me an email or pull request.
