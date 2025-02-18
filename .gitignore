@@ -1,2 +1,6 @@
 /datasets
 .idea
+bin
+/.DS_Store
+/__pycache__
+/*.txt

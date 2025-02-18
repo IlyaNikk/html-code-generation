@@ -34,7 +34,7 @@ class Sampler:
             if verbose:
                 print("predicting {}/{}...".format(i, sequence_length))
 
-            probas = model.predict(input_img, np.array([current_context]))
+            probas = model.predict([input_img, np.array([current_context])], batch_size=1, steps=None, verbose=0)
             prediction = np.argmax(tf.nn.softmax(probas))
 
             out_probas.append(probas)

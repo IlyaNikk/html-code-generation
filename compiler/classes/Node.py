@@ -22,11 +22,14 @@ class Node:
         for child in self.children:
             content += child.render(mapping, rendering_function)
 
-        value = mapping[self.key]
-        if rendering_function is not None:
-            value = rendering_function(self.key, value)
+        if self.key in mapping:
+            value = mapping[self.key]
+            if rendering_function is not None:
+                value = rendering_function(self.key, value)
 
-        if len(self.children) != 0:
-            value = value.replace(self.content_holder, content)
+            if len(self.children) != 0:
+                value = value.replace(self.content_holder, content)
 
-        return value
+            return value
+
+        return ''

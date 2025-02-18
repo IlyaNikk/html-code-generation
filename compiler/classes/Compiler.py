@@ -39,3 +39,28 @@ class Compiler:
         output_html = self.root.render(self.dsl_mapping, rendering_function=rendering_function)
         with open(output_file_path, 'w') as output_file:
             output_file.write(output_html)
+
+    def compile_in_runtime(self, prediction, rendering_function=None):
+        self.root = Node("body", None, self.content_holder)
+        current_parent = self.root
+
+        for token in prediction.splitlines():
+            token = token.replace(" ", "").replace("\n", "")
+
+            if token.find(self.opening_tag) != -1:
+                token = token.replace(self.opening_tag, "")
+
+                element = Node(token, current_parent, self.content_holder)
+                current_parent.add_child(element)
+                current_parent = element
+            elif token.find(self.closing_tag) != -1:
+                current_parent = current_parent.parent
+            else:
+                tokens = token.split(",")
+                for t in tokens:
+                    element = Node(t, current_parent, self.content_holder)
+                    current_parent.add_child(element)
+
+        output_html = self.root.render(self.dsl_mapping, rendering_function=rendering_function)
+
+        return output_html
