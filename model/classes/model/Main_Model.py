@@ -10,6 +10,7 @@ from .Config import *
 from .AModel import *
 from .autoencoder_image import *
 import matplotlib.pyplot as plt
+from .Main_Model_Testing_Callback import *
 
 
 class Main_Model(AModel):
@@ -73,10 +74,11 @@ class Main_Model(AModel):
             save_freq='epoch'
         )
 
-        checkpoint_file_name = "{}/{}.h5".format(self.output_path, self.name)
+        checkpoint_file_name = "{}/Main_model.weights.h5".format(self.output_path)
         self.model.load_weights(checkpoint_file_name)
         # loss, acc = self.model.evaluate(generator)
         # print("Restored model, accuracy: {:5.2f}%".format(100 * acc))
+        testing_callback = TestingCallback()
 
         history = self.model.fit(
             generator,
@@ -85,7 +87,7 @@ class Main_Model(AModel):
             validation_steps=validation_steps,
             epochs=EPOCHS,
             verbose=1,
-            callbacks=[model_checkpoint_callback])
+            callbacks=[model_checkpoint_callback, testing_callback])
         self.save()
         self.visualizeReult(history)
 
@@ -96,7 +98,7 @@ class Main_Model(AModel):
         return self.model.predict((images, partial_captions), verbose=1)
 
     def visualizeReult(self, history):
-        acc = history .history['accuracy']
+        acc = history.history['accuracy']
         val_acc = history.history['val_accuracy']
 
         loss = history.history['loss']
