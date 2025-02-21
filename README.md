@@ -63,17 +63,11 @@ The dataset is split into two sets:
 > Model Training
 
 ```
-cd model
-
-# provide input path to training data and output path to save trained model and metadata
-# usage: train.py <input path> <output path> <train_autoencoder>
-./train.py ../datasets/web/training_set ../bin
-
 # train on images pre-processed as converted to numpy arrays
-./train.py ../datasets/web/training_features ../bin
+make train_model_web
 
 # train with autoencoder
-./train.py ../datasets/web/training_features ../bin 1
+make train_autoencoder_web
 ```
 
 > Generate Code for an Image
@@ -108,11 +102,14 @@ cd compiler
 To check if model works correctly, there are functional tests, that check final result of model with initial dataset 
 
 ```
-cd tests
-
 # iterate over all gui/png pair to check the correctness of prediction model
-# usage: functional-test.py <trained weights path> <trained model name> <input folder path>.gui <save diff image>
-./functional-test.py ../bin/web Main_Model.weights ../datasets 1
+make functional_for_web
+
+# iterate over all gui/png pair to check the correctness of prediction model and save diff
+make functional_for_web_diff
+
+#count BLEU score for code
+make bleu_for_web
 ```
 
 ### Acknowledgement

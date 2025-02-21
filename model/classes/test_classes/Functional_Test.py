@@ -1,11 +1,14 @@
+import sys
 import numpy as np
 import tensorflow as tf
+
+sys.path.append('./')
 
 from PIL import  Image
 from playwright.sync_api import sync_playwright
 
-from classes.Vocabulary import START_TOKEN, END_TOKEN
-from classes.model.Config import IMAGE_SIZE
+from ..Vocabulary import START_TOKEN, END_TOKEN
+from ..model.Config import IMAGE_SIZE
 
 TEXT_PLACE_HOLDER = "[]"
 
@@ -29,7 +32,7 @@ class FunctionalTest:
 
     def run_tests(self, predict_result, file_name):
         gui_name = file_name.replace(".gui", "")
-        master_gui = open("{}/{}.gui".format(self.input_path, file_name), 'r').read()
+        master_gui = open("{}/{}.gui".format(self.input_path, gui_name), 'r').read()
         master_gui = master_gui.replace(START_TOKEN, "").replace(END_TOKEN, "")
 
         result = predict_result.replace(START_TOKEN, "").replace(END_TOKEN, "")

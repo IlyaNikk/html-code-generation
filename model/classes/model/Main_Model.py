@@ -23,7 +23,7 @@ class Main_Model(AModel):
         # Load the pre-trained autoencoder model
         autoencoder_model = autoencoder_image(input_shape, input_shape, output_path)
         autoencoder_model.load('autoencoder.weights')
-        autoencoder_model.model.load_weights('../bin/autoencoder.weights.h5')
+        autoencoder_model.model.load_weights('{}/autoencoder.weights.h5'.format(output_path))
 
         hidden_layer_model_freeze = Model(inputs=autoencoder_model.model.input,
                                           outputs=autoencoder_model.model.get_layer('encoded_layer').output)
@@ -83,7 +83,7 @@ class Main_Model(AModel):
         history = self.model.fit(
             generator,
             validation_data=validation_generator,
-            steps_per_epoch=steps_per_epoch,
+            steps_per_epoch=1,
             validation_steps=validation_steps,
             epochs=EPOCHS,
             verbose=1,

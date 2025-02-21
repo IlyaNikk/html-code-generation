@@ -1,23 +1,18 @@
-import os
 import sys
-import re
 import keras.src.callbacks
-import numpy as np
 
-parent_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-sys.path.append("/Users/ivnikitin/Desktop/аспирантура/Научная работа/html-code-generation-from-images-with-deep-neural-networks")
-print('/Users/ivnikitin/Desktop/аспирантура/Научная работа/html-code-generation-from-images-with-deep-neural-networks')
+sys.path.append('./')
 
 from ..Sampler import *
-from .Config import CONTEXT_LENGTH
+from .Config import CONTEXT_LENGTH, IMAGE_SIZE
 from compiler.classes.Compiler import *
-from tests.test_classes.Functional_Test import *
-from tests.test_classes.BLEU import *
-from classes.model.Config import IMAGE_SIZE
+from ..test_classes.Functional_Test import *
+from ..test_classes.BLEU import *
 
-DSL_PATH = "../compiler/assets/web-dsl-mapping.json"
-trained_weights_path = "../bin/web"
-input_path = "../datasets/web/eval_set"
+DSL_PATH = "compiler/assets/web-dsl-mapping.json"
+trained_weights_path = "bin/web"
+input_path = "datasets/web/eval_set"
+logs_path = "resources/logs.txt"
 
 class TestingCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
@@ -48,7 +43,7 @@ class TestingCallback(keras.callbacks.Callback):
             "2F2F9495-4422-4B87-9F30-260974449686.gui"
         ]
 
-        with open('../resources/logs.txt', 'a') as file_to_write:
+        with open(logs_path, 'a') as file_to_write:
             for file in gui_files:
                 gui_name = file.replace(".gui", "")
                 img = tf.keras.utils.load_img(

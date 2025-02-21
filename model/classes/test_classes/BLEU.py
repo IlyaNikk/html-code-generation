@@ -1,4 +1,8 @@
-from classes.Vocabulary import START_TOKEN, END_TOKEN
+import sys
+
+sys.path.append('./')
+
+from ..Vocabulary import START_TOKEN, END_TOKEN
 
 from nltk.translate.bleu_score import sentence_bleu
 

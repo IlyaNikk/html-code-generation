@@ -21,7 +21,7 @@ class Sampler:
 
         self.context_length = context_length
 
-    def predict_greedy(self, model, input_img, require_sparse_label=True, sequence_length=150, verbose=False):
+    def predict_greedy(self, model, input_img, require_sparse_label=True, sequence_length=150, verbose=False, while_testing=False):
         current_context = [self.voc.vocabulary[PLACEHOLDER]] * (self.context_length - 1)
         current_context.append(self.voc.vocabulary[START_TOKEN])
         if require_sparse_label:
@@ -34,7 +34,10 @@ class Sampler:
             if verbose:
                 print("predicting {}/{}...".format(i, sequence_length))
 
-            probas = model.predict([input_img, np.array([current_context])], batch_size=1, steps=None, verbose=0)
+            if while_testing:
+                probas = model.predict(input_img, np.array([current_context]))
+            else:
+                probas = model.predict([input_img, np.array([current_context])], batch_size=1, steps=None, verbose=0)
             prediction = np.argmax(tf.nn.softmax(probas))
 
             out_probas.append(probas)
