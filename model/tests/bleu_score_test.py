@@ -2,10 +2,9 @@ import sys
 import os
 import re
 
-parent_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-sys.path.append(parent_dir)
+sys.path.append('./')
 
-from classes.model.Main_Model import *
+from model.classes.model.Main_Model import *
 
 argv = sys.argv[1:]
 
@@ -39,7 +38,17 @@ png_files = list(filter(lambda s: re.search(".*\\.png$", s), files))
 
 print(gui_files)
 for file in gui_files:
-    resultBleu = BLEU.get_bleu_score(model, sampler, file, input_path)
+    gui_name = file.replace(".gui", "")
+
+    img = tf.keras.utils.load_img(
+        "{}/{}.png".format(input_path, gui_name), target_size=(IMAGE_SIZE, IMAGE_SIZE)
+    )
+    evaluation_img = tf.keras.utils.img_to_array(img)
+
+    result, _ = sampler.predict_greedy(model, np.array([evaluation_img]), while_testing=True)
+    result = result.replace(START_TOKEN, "").replace(END_TOKEN, "")
+
+    resultBleu = BLEU.get_bleu_score(result, gui_name, input_path)
 
     print(file)
     print('BLEU score -> {}'.format(resultBleu[0]))
