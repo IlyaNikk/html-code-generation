@@ -53,6 +53,7 @@ for file in gui_files:
     evaluation_img = tf.keras.utils.img_to_array(img)
 
     result, _ = sampler.predict_greedy(model, np.array([evaluation_img]), while_testing=True)
+    print(result)
     result = result.replace(START_TOKEN, "").replace(END_TOKEN, "")
     diff_master_and_prediction, diff_percentage = functional_test_instance.run_tests(result, file)
 
