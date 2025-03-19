@@ -19,7 +19,6 @@ class TestingCallback(keras.callbacks.Callback):
         meta_dataset = np.load("{}/meta_dataset.npy".format(trained_weights_path), allow_pickle=True)
         input_shape = meta_dataset[0]
         output_size = meta_dataset[1]
-        print(self.params)
 
         sampler = Sampler(trained_weights_path, input_shape, output_size, CONTEXT_LENGTH)
         compiler = Compiler(DSL_PATH)
@@ -57,34 +56,39 @@ class TestingCallback(keras.callbacks.Callback):
                 # print('test: {}, {}'.format(''.join(result.replace('\n', '')), len(''.join(result.replace('\n', '')))))
                 if len(''.join(result.replace('\n', ''))) != 0:
                     resultBleu = BLEU.get_bleu_score(result, gui_name, input_path)
+                    resultChrf = BLEU.get_chrf_score(result, gui_name, input_path)
 
                     print('{}'.format(file))
-                    print('BLEU score -> {}'.format(resultBleu[0]))
+                    print('BLEU score: {}'.format(resultBleu[0]))
                     print('Individual 1-gram: %f' % resultBleu[1])
                     print('Individual 2-gram: %f' % resultBleu[2])
                     print('Individual 3-gram: %f' % resultBleu[3])
                     print('Individual 4-gram: %f' % resultBleu[4])
+                    print('chrF score: %f' % resultChrf)
 
                     file_to_write.write('{} \n'.format(file))
-                    file_to_write.write('BLEU score -> {}\n'.format(resultBleu[0]))
+                    file_to_write.write('BLEU score: {}\n'.format(resultBleu[0]))
                     file_to_write.write('Individual 1-gram: %f\n' % resultBleu[1])
                     file_to_write.write('Individual 2-gram: %f\n' % resultBleu[2])
                     file_to_write.write('Individual 3-gram: %f\n' % resultBleu[3])
                     file_to_write.write('Individual 4-gram: %f\n' % resultBleu[4])
+                    file_to_write.write('chrF score: %f\n' % resultChrf)
 
                     diff_master_and_prediction, diff_percentage = functional_test_instance.run_tests(result, gui_name)
 
-                    print('Image diff -> {}'.format(diff_percentage))
-                    file_to_write.write('Image diff -> {}\n'.format(diff_percentage))
+                    print('Image diff: {}'.format(diff_percentage))
+                    file_to_write.write('Image diff: {}\n'.format(diff_percentage))
                     file_to_write.write('\n\n')
 
                 else:
                     print('{}'.format(file))
                     print('BLEU score -> {}'.format(0))
+                    print('chrf score -> {}'.format(0))
 
                     file_to_write.write('{} \n'.format(file))
-                    file_to_write.write('BLEU score -> {}\n'.format(0))
+                    file_to_write.write('BLEU score: {}\n'.format(0))
+                    file_to_write.write('chrf score: {}\n'.format(0))
 
                     print('Image diff -> {}'.format(100))
-                    file_to_write.write('Image diff -> {}\n'.format(100))
+                    file_to_write.write('Image diff: {}\n'.format(100))
                     file_to_write.write('\n\n')

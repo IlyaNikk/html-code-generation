@@ -28,6 +28,7 @@ model.load(trained_model_name)
 
 sampler = Sampler(trained_weights_path, input_shape, output_size, CONTEXT_LENGTH)
 
+print(input_path)
 files = os.listdir(input_path)
 gui_files = list(filter(lambda s: re.search(".*\\.gui$", s), files))
 png_files = list(filter(lambda s: re.search(".*\\.png$", s), files))
@@ -46,9 +47,12 @@ for file in gui_files:
     evaluation_img = tf.keras.utils.img_to_array(img)
 
     result, _ = sampler.predict_greedy(model, np.array([evaluation_img]), while_testing=True)
+    print('result: {}'.format(result))
+
     result = result.replace(START_TOKEN, "").replace(END_TOKEN, "")
 
     resultBleu = BLEU.get_bleu_score(result, gui_name, input_path)
+    resultChrf = BLEU.get_chrf_score(result, gui_name, input_path)
 
     print(file)
     print('BLEU score -> {}'.format(resultBleu[0]))
@@ -56,3 +60,4 @@ for file in gui_files:
     print('Individual 2-gram: %f' % resultBleu[2])
     print('Individual 3-gram: %f' % resultBleu[3])
     print('Individual 4-gram: %f' % resultBleu[4])
+    print('chrF score: %f' % resultBleu[4])

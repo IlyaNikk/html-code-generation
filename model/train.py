@@ -1,22 +1,19 @@
-from __future__ import print_function
-from __future__ import absolute_import
-
-__author__ = 'Tony Beltramelli - www.tonybeltramelli.com :: original author of the paper'
-# for modified version
-__author__ = 'Taneem Jan, taneemishere.github.io'
-
+import os
 import tensorflow as tf
 
+# Инициализируем сессию TensorFlow
 sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(log_device_placement=True))
 
 import sys
 from classes.dataset.Generator import *
 from classes.model.Main_Model import *
+from classes.BatchTensorBoard import *
 from classes.model.autoencoder_image import *
 from keras.backend import clear_session
 
+# Импорт стандартного TensorBoard callback
+from tensorflow.keras.callbacks import TensorBoard
 
-# removed some training parameters, to make the code input easier
 def run(input_path, input_validation_path, output_path, train_autoencoder=False):
     np.random.seed(1234)
 
@@ -54,21 +51,43 @@ def run(input_path, input_validation_path, output_path, train_autoencoder=False)
         generate_binary_sequences=True
     )
 
-    # Included a generator for images only as an input for autoencoders
+    # Генератор для изображений (для автоэнкодера)
     generator_images = Generator.data_generator(voc, gui_paths, img_paths, batch_size=BATCH_SIZE,
                                                 input_shape=input_shape, generate_binary_sequences=True,
                                                 images_only=True)
 
+    # Создаем директорию для логов TensorBoard, если её нет
+    log_dir_autoencoder = os.path.join(output_path, "logs_autoencoder")
+    if not os.path.exists(log_dir_autoencoder):
+        os.makedirs(log_dir_autoencoder)
+
+    log_dir_text = os.path.join(output_path, "logs_text")
+    if not os.path.exists(log_dir_text):
+        os.makedirs(log_dir_text)
+
+    # Стандартный TensorBoard callback (логирование графа и гистограмм раз в эпоху)
+    tensorboard_callback_autoencoder = TensorBoard(log_dir=log_dir_autoencoder, histogram_freq=1, write_graph=True)
+    tensorboard_callback_autoencoder
+    tensorboard_callback_lstm = TensorBoard(log_dir=log_dir_text, histogram_freq=1, write_graph=True)
+
+    # Наш кастомный callback для логирования метрик после каждого батча
+    batch_tensorboard_callback_autoencoder = BatchTensorBoard(log_dir=log_dir_autoencoder)
+    batch_tensorboard_callback_lstm = BatchTensorBoard(log_dir=log_dir_text)
+
     # For training of autoencoders
     if train_autoencoder:
         autoencoder_model = autoencoder_image(input_shape, input_shape, output_path)
-        autoencoder_model.fit_generator(generator_images, steps_per_epoch=steps_per_epoch)
+        autoencoder_model.fit_generator(generator_images, steps_per_epoch=steps_per_epoch,
+                                        callbacks=[tensorboard_callback_autoencoder, batch_tensorboard_callback_autoencoder])
         clear_session()
 
     # Training of our main-model
     model = Main_Model(input_shape, output_size, output_path)
-    model.fit_generator(generator, validation_generator, steps_per_epoch=steps_per_epoch, validation_steps=validation_steps)
-
+    model.fit_generator(generator,
+                        validation_generator,
+                        steps_per_epoch=steps_per_epoch,
+                        validation_steps=validation_steps,
+                        callbacks=[tensorboard_callback_lstm, batch_tensorboard_callback_lstm])
 
 if __name__ == "__main__":
     argv = sys.argv[1:]
