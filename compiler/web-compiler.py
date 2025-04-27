@@ -21,7 +21,7 @@ if __name__ == "__main__":
 FILL_WITH_RANDOM_TEXT = True
 TEXT_PLACE_HOLDER = "[]"
 
-dsl_path = "assets/web-dsl-mapping.json"
+dsl_path = "compiler/assets/web-dsl-mapping.json"
 compiler = Compiler(dsl_path)
 
 
