@@ -3,6 +3,7 @@ import random
 import os
 import uuid
 import sys
+import datetime
 from playwright.sync_api import sync_playwright
 
 sys.path.append('./')
@@ -18,7 +19,7 @@ NEW_LINE = "\n"
 ALL_CHILDREN_RESTRICTION = "allChildren"
 ONLY_ONE_CHILD_RESTRICTION = "onlyOneChild"
 SKIP_RESTRICTION = "skip"
-OUTPUT_DIRECTORY = '{}/datasets/generated'.format(os.getcwd())
+OUTPUT_DIRECTORY = '{}/datasets/generated/web/test'.format(os.getcwd())
 
 argv = sys.argv[1:]
 

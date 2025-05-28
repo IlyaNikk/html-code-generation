@@ -4,11 +4,12 @@ import tensorflow as tf
 
 sys.path.append('./')
 
-from PIL import  Image
+from PIL import Image
 from playwright.sync_api import sync_playwright
 
 from ..Vocabulary import START_TOKEN, END_TOKEN
 from ..model.Config import IMAGE_SIZE
+from compiler.classes.Utils import *
 
 TEXT_PLACE_HOLDER = "[]"
 
@@ -20,16 +21,6 @@ class FunctionalTest:
         self.compiler = compiler
         self.input_path = input_path
 
-    def render_content_with_text(self, key, value):
-        if key.find("btn") != -1:
-            return value.replace(TEXT_PLACE_HOLDER, "What is Lorem?")
-        elif key.find("title") != -1:
-            return value.replace(TEXT_PLACE_HOLDER, "Lorem Ipsum")
-        elif key.find("text") != -1:
-            return value.replace(TEXT_PLACE_HOLDER, "Lorem Ipsum is simply dummy text of the printing and typesetting industry."
-                                                    " Lorem Ipsum has been the industry's standard dummy text ever since the 1500s")
-        return value
-
     def run_tests(self, predict_result, file_name):
         gui_name = file_name.replace(".gui", "")
         master_gui = open("{}/{}.gui".format(self.input_path, gui_name), 'r').read()
@@ -39,14 +30,14 @@ class FunctionalTest:
 
         # print("Functional result: {}".format(result))
 
-        master_html = self.compiler.compile_in_runtime(master_gui, rendering_function=self.render_content_with_text)
-        compiled_after_prediction_html = self.compiler.compile_in_runtime(result, rendering_function=self.render_content_with_text)
+        master_html = self.compiler.compile_in_runtime(master_gui, rendering_function=Utils.render_content_with_text)
+        compiled_after_prediction_html = self.compiler.compile_in_runtime(result, rendering_function=Utils.render_content_with_text)
 
         with sync_playwright() as p:
             browser = p.webkit.launch()
             page = browser.new_page()
             #
-            page.set_viewport_size({"width": 1280, "height": 986})
+            page.set_viewport_size({"width": 1280, "height": 2860})
             page.set_content(master_html, wait_until="load")
             page.screenshot(path='master_screenshot.png')
 

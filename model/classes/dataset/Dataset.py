@@ -92,7 +92,7 @@ class Dataset:
 
         token_sequence = [START_TOKEN]
         for line in gui:
-            line = line.replace(",", " ,").replace("\n", " \n")
+            line = line.replace("\t ", "").replace("\t", "").replace(",", " ,").replace("\n", " \n")
             tokens = line.split(" ")
             for token in tokens:
                 self.voc.append(token)

@@ -17,7 +17,7 @@ train_autoencoder_ios:
 	python3 model/train.py datasets/ios/training_set datasets/ios/eval_set bin/ios 1
 
 bleu_for_web:
-	python3 model/tests/bleu_score_test.py bin/web Main_Model_transformer.weights tests
+	python3 model/tests/bleu_score_test.py bin/web Main_Model.weights tests
 
 functional_for_web:
 	python3 model/tests/functional-test.py bin/web Main_Model.weights datasets/web/eval_set
@@ -33,3 +33,6 @@ autoencoder_predict:
 
 create_dataset:
 	python3 compiler/generate_dataset.py ${COUNT}
+
+train_model_new_web:
+	python3 model/train.py datasets/generated/web/training_set datasets/generated/web/eval_set bin/web
