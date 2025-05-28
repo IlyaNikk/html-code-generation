@@ -1,5 +1,4 @@
 from __future__ import print_function
-__author__ = 'Taneem Jan, taneemishere.github.io'
 
 
 class Node:
@@ -13,7 +12,6 @@ class Node:
         self.children.append(child)
 
     def show(self):
-        print(self.key)
         for child in self.children:
             child.show()
 

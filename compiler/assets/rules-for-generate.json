@@ -1,0 +1,34 @@
+{
+  "relations": {
+    "header": ["btn-active", "btn-inactive", "btn-green", "btn-orange", "btn-red", "big-title", "small-title", "text"],
+    "main": ["row", "btn-active", "btn-inactive", "btn-green", "btn-orange", "btn-red", "big-title", "small-title", "text"],
+    "row": ["single", "double", "quadruple", "carousel-wrapper"],
+    "single": ["btn-active", "btn-inactive", "btn-green", "btn-orange", "btn-red", "big-title", "small-title", "text"],
+    "double": ["btn-active", "btn-inactive", "btn-green", "btn-orange", "btn-red", "big-title", "small-title", "text"],
+    "quadruple": ["btn-active", "btn-inactive", "btn-green", "btn-orange", "btn-red", "big-title", "small-title", "text"],
+    "btn-active":  [],
+    "btn-inactive":  [],
+    "btn-green":  [],
+    "btn-orange":  [],
+    "btn-red":  [],
+    "big-title":  [],
+    "small-title":  [],
+    "text": [],
+    "footer": [],
+    "carousel-wrapper": ["carousel-indicator-wrappers", "carousel-content-wrapper"],
+    "carousel-indicator-wrappers": ["carousel-indicator"],
+    "carousel-content-wrapper": ["carousel-item"],
+    "carousel-indicator": [],
+    "carousel-item": []
+  },
+  "top": "body",
+  "length": 150,
+  "structure": ["header", "main", "footer"],
+  "restrictions": {
+    "carousel-wrapper": ["allChildren"],
+    "carousel-indicator-wrappers": ["onlyOneChild", "skip"],
+    "carousel-content-wrapper": ["onlyOneChild","skip"],
+    "carousel-indicator": ["skip"],
+    "carousel-item": ["skip"]
+  }
+}

@@ -1,5 +1,3 @@
-__author__ = 'Taneem Jan, taneemishere.github.io'
-
 import json
 from .Node import *
 
@@ -44,12 +42,25 @@ class Compiler:
         self.root = Node("body", None, self.content_holder)
         current_parent = self.root
 
-        for token in prediction.splitlines():
-            token = token.replace(" ", "").replace("\n", "")
+        prediction_lines = prediction.splitlines()
+        if prediction_lines[0].find("body") != -1:
+            prediction_lines = prediction_lines[1:len(prediction_lines)-1]
+
+        for token in prediction_lines:
+            token = token.replace(" ", "").replace("\n", "").replace("\t", "")
+            if len(token) == 0:
+                continue
 
             if token.find(self.opening_tag) != -1:
                 token = token.replace(self.opening_tag, "")
 
+                if token.find(",") != -1:
+                    tokens = token.split(",")
+                    for t in tokens[:-1]:
+                        element = Node(t, current_parent, self.content_holder)
+                        current_parent.add_child(element)
+
+                    token = tokens[-1]
                 element = Node(token, current_parent, self.content_holder)
                 current_parent.add_child(element)
                 current_parent = element

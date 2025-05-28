@@ -3,6 +3,7 @@ from __future__ import print_function
 # Modified version
 __author__ = 'Taneem Jan, taneemishere.github.io'
 
+import random
 
 import numpy as np
 from ..dataset.Dataset import *
@@ -23,7 +24,10 @@ class Generator:
             batch_next_words = []
             sample_in_batch_counter = 0
 
-            for i in range(0, len(gui_paths)):
+            for k in range(0, len(gui_paths)):
+                i = random.randint(0, len(gui_paths) - 1)
+                if 0 > i or i >= len(gui_paths):
+                    i = 0
                 if img_paths[i].find(".png") != -1:
                     img = Utils.get_preprocessed_img(img_paths[i], IMAGE_SIZE)
                 else:
@@ -32,7 +36,7 @@ class Generator:
 
                 token_sequence = [START_TOKEN]
                 for line in gui:
-                    line = line.replace(",", " ,").replace("\n", " \n")
+                    line = line.replace("\t ", "").replace("\t", "").replace(",", " ,").replace("\n", " \n")
                     tokens = line.split(" ")
                     for token in tokens:
                         voc.append(token)

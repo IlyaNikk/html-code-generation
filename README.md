@@ -89,11 +89,10 @@ cd model
 > Compile the .gui code to HTML
 
 ```
-cd compiler
-
 # compile .gui file to HTML code
 # usage: web-compiler.py <input file path>.gui
-./web-compiler.py ../generated-output/dot_gui.file
+
+make compile_gui PATH="./0BA2A4B4-4193-4506-8818-31564225EF8B.gui"
 ```
 
 
@@ -112,6 +111,20 @@ make functional_for_web_diff
 make bleu_for_web
 ```
 
-### Acknowledgement
+> Datasets
 
-- This project is done on top of the original work by Tony Beltramelli's [Paper](https://arxiv.org/pdf/1705.07962.pdf) and the [Datasets](https://github.com/tonybeltramelli/pix2code/tree/master/datasets) from him.
+This project is done on top of the original work by Tony Beltramelli's [Paper](https://arxiv.org/pdf/1705.07962.pdf) and the [Datasets](https://github.com/tonybeltramelli/pix2code/tree/master/datasets) from him.
+If you want to create datasets, depend on yours style or components, you can do it by calling script
+```
+# create new dataset
+# usage: 
+make crate_dataset
+
+# iterate over all gui/png pair to check the correctness of prediction model and save diff
+make functional_for_web_diff
+
+#count BLEU score for code
+make bleu_for_web
+```
+
+### Acknowledgement

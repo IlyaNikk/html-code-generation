@@ -24,3 +24,15 @@ functional_for_web:
 
 functional_for_web_diff:
 	python3 model/tests/functional-test.py bin/web Main_Model.weights datasets/web/eval_set 1
+
+compile_gui:
+	python3 ./compiler/web-compiler.py ${PATH}
+
+autoencoder_predict:
+	python3 model/tests/autoencoder.py datasets/web/training_set bin/web tests
+
+create_dataset:
+	python3 compiler/generate_dataset.py ${COUNT}
+
+train_model_new_web:
+	python3 model/train.py datasets/generated/web/training_set datasets/generated/web/eval_set bin/web
