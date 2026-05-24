@@ -4,6 +4,7 @@ import keras.src.callbacks
 sys.path.append('./')
 
 from ..Sampler import *
+from ..Utils import Utils
 from .Config import CONTEXT_LENGTH, IMAGE_SIZE
 from compiler.classes.Compiler import *
 from ..test_classes.Functional_Test import *
@@ -45,10 +46,9 @@ class TestingCallback(keras.callbacks.Callback):
         with open(logs_path, 'a') as file_to_write:
             for file in gui_files:
                 gui_name = file.replace(".gui", "")
-                img = tf.keras.utils.load_img(
-                    "{}/{}.png".format(input_path, gui_name), target_size=(IMAGE_SIZE, IMAGE_SIZE)
-                )
-                evaluation_img = tf.keras.utils.img_to_array(img)
+                # Та же предобработка, что и при обучении (BGR + /255), иначе train/test skew
+                evaluation_img = Utils.get_preprocessed_img(
+                    "{}/{}.png".format(input_path, gui_name), IMAGE_SIZE)
 
                 result, _ = sampler.predict_greedy(self.model, np.array([evaluation_img]))
                 result = result.replace(START_TOKEN, "").replace(END_TOKEN, "")
@@ -74,7 +74,14 @@ class TestingCallback(keras.callbacks.Callback):
                     file_to_write.write('Individual 4-gram: %f\n' % resultBleu[4])
                     file_to_write.write('chrF score: %f\n' % resultChrf)
 
-                    diff_master_and_prediction, diff_percentage = functional_test_instance.run_tests(result, gui_name)
+                    # На ранних эпохах предсказания обычно невалидны как DSL (несбалансированные
+                    # теги и т.п.). Не даём одному плохому сэмплу уронить всё обучение —
+                    # ловим исключение и записываем 100% diff как индикатор провала.
+                    try:
+                        diff_master_and_prediction, diff_percentage = functional_test_instance.run_tests(result, gui_name)
+                    except Exception as e:
+                        print('Functional test failed on {}: {}: {}'.format(gui_name, type(e).__name__, e))
+                        diff_percentage = 100
 
                     print('Image diff: {}'.format(diff_percentage))
                     file_to_write.write('Image diff: {}\n'.format(diff_percentage))

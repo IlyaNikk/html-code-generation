@@ -2,7 +2,7 @@
 __author__ = 'Taneem Jan, taneemishere.github.io'
 
 import keras.src.callbacks
-from keras.layers import Input, Dense, Dropout, RepeatVector, LSTM, concatenate, Flatten, Embedding, Attention, TimeDistributed
+from keras.layers import Input, Dense, Dropout, RepeatVector, LSTM, concatenate, Flatten, Embedding, Attention, TimeDistributed, Cropping1D, Reshape
 from keras.models import Sequential, Model
 import tensorflow as tf
 from keras import *
@@ -11,6 +11,42 @@ from .AModel import *
 from .autoencoder_image import *
 import matplotlib.pyplot as plt
 from .Main_Model_Testing_Callback import *
+
+
+@keras.saving.register_keras_serializable()
+class TokenAndPositionEmbedding(tf.keras.layers.Layer):
+    """Эмбеддинг токена (линейная проекция one-hot) + обучаемое позиционное кодирование.
+
+    Без позиционного кодирования self-attention перестановочно-инвариантен и не
+    видит порядок токенов (#3) — для генерации кода это критично. Регистрируется как
+    сериализуемый слой, чтобы AModel.load() мог восстановить модель из JSON.
+    """
+
+    def __init__(self, maxlen, embed_dim, **kwargs):
+        super().__init__(**kwargs)
+        self.maxlen = maxlen
+        self.embed_dim = embed_dim
+        self.token_emb = tf.keras.layers.Dense(embed_dim)
+        self.pos_emb = tf.keras.layers.Embedding(input_dim=maxlen, output_dim=embed_dim)
+
+    def build(self, input_shape):
+        # Явно строим вложенные слои, чтобы их веса корректно создавались/загружались
+        # при восстановлении модели через model_from_json + load_weights (путь AModel.load)
+        self.token_emb.build(input_shape)
+        self.pos_emb.build((self.maxlen,))
+        super().build(input_shape)
+
+    def call(self, inputs):
+        positions = tf.range(start=0, limit=self.maxlen, delta=1)
+        positions = self.pos_emb(positions)
+        tokens = self.token_emb(inputs)
+        return tokens + positions
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"maxlen": self.maxlen, "embed_dim": self.embed_dim})
+        return config
+
 
 class Main_Model(AModel):
     def __init__(self, input_shape, output_size, output_path):
@@ -27,15 +63,14 @@ class Main_Model(AModel):
         hidden_layer_model_freeze = Model(inputs=autoencoder_model.model.input,
                                           outputs=autoencoder_model.model.get_layer('max_pooling2d').output)
         hidden_layer_input = hidden_layer_model_freeze(visual_input)
-        #
-        # Additional layers before concatenation
-        hidden_layer_model = Flatten()(hidden_layer_input)
-        hidden_layer_model = Dense(1024, activation='relu')(hidden_layer_model)
-        hidden_layer_model = Dropout(0.3)(hidden_layer_model)
-        hidden_layer_model = Dense(1024, activation='relu')(hidden_layer_model)
-        hidden_layer_model = Dropout(0.3)(hidden_layer_model)
-        # Получаем последовательность с фиксированной длиной CONTEXT_LENGTH
-        hidden_layer_result = RepeatVector(CONTEXT_LENGTH)(hidden_layer_model)
+        # (#6) Сохраняем пространственную структуру карты признаков как последовательность
+        # «регионов» изображения, а не сворачиваем её в один глобальный вектор, который
+        # затем одинаково копировался на все шаги (RepeatVector) — из-за чего модель не
+        # могла «смотреть» на разные части макета.
+        # Карта (H, W, C) -> последовательность (H*W, C) токенов-регионов -> проекция в d_model.
+        num_channels = hidden_layer_input.shape[-1]
+        image_regions = Reshape((-1, num_channels))(hidden_layer_input)
+        image_regions = Dense(256, activation='relu')(image_regions)
 
         # Make sure the loaded hidden_layer_model_freeze will no longer be updated
         for layer in hidden_layer_model_freeze.layers:
@@ -54,24 +89,43 @@ class Main_Model(AModel):
             x = tf.keras.layers.LayerNormalization(epsilon=1e-6)(x)
             return x
 
-        # Вход для текстовой части (например, представление предыдущих слов)
-        textual_input = Input(shape=(CONTEXT_LENGTH, output_size))
-        # Применяем трансформерный блок к текстовой последовательности
-        encoded_text = transformer_encoder(textual_input, head_size=64, num_heads=4, ff_dim=128, dropout=0.1)
+        # Блок кросс-внимания: текстовые запросы «смотрят» на регионы изображения (#6)
+        def cross_attention_block(query, context, num_heads, key_dim, ff_dim, dropout=0.1):
+            x = tf.keras.layers.MultiHeadAttention(key_dim=key_dim, num_heads=num_heads, dropout=dropout)(
+                query=query, value=context, key=context)
+            x = tf.keras.layers.Dropout(dropout)(x)
+            x = tf.keras.layers.Add()([x, query])
+            x = tf.keras.layers.LayerNormalization(epsilon=1e-6)(x)
+            x_ff = tf.keras.layers.Dense(ff_dim, activation="relu")(x)
+            x_ff = tf.keras.layers.Dense(query.shape[-1])(x_ff)
+            x_ff = tf.keras.layers.Dropout(dropout)(x_ff)
+            x = tf.keras.layers.Add()([x, x_ff])
+            x = tf.keras.layers.LayerNormalization(epsilon=1e-6)(x)
+            return x
 
-        # Объединяем визуальное и текстовое представления (конкатенация по последнему измерению)
-        combined = concatenate([hidden_layer_result, encoded_text], axis=-1)
-        # Применяем ещё один трансформерный блок к объединённой последовательности
-        combined = transformer_encoder(combined, head_size=64, num_heads=4, ff_dim=256, dropout=0.1)
-        # Глобальное усреднение по временной оси
-        pooled = tf.keras.layers.GlobalAveragePooling1D()(combined)
+        # Вход для текстовой части (one-hot представление предыдущих токенов)
+        textual_input = Input(shape=(CONTEXT_LENGTH, output_size))
+        # (#3) Эмбеддинг токенов + позиционное кодирование вместо подачи one-hot напрямую,
+        # чтобы трансформер видел порядок токенов в окне контекста
+        embedded_text = TokenAndPositionEmbedding(CONTEXT_LENGTH, 256)(textual_input)
+        # Применяем трансформерный блок к текстовой последовательности
+        encoded_text = transformer_encoder(embedded_text, head_size=64, num_heads=4, ff_dim=512, dropout=0.1)
+
+        # (#6) Вместо конкатенации одного и того же изображения на каждый шаг —
+        # кросс-внимание: каждый текстовый токен выбирает релевантные регионы макета
+        combined = cross_attention_block(encoded_text, image_regions, num_heads=4, key_dim=64, ff_dim=256, dropout=0.1)
+        # (#4) Берём представление ПОСЛЕДНЕГО шага окна (самый свежий токен — главный предиктор
+        # следующего), а не GlobalAveragePooling по всей последовательности, которое размывало
+        # сигнал последнего токена усреднением с 47 позициями (часто PLACEHOLDER-паддингом)
+        last_step = Cropping1D(cropping=(CONTEXT_LENGTH - 1, 0))(combined)
+        last_step = Flatten()(last_step)
         # Финальный классификатор с softmax для предсказания следующего слова/токена
-        output = Dense(output_size, activation='softmax')(pooled)
+        output = Dense(output_size, activation='softmax')(last_step)
 
         self.model = Model(inputs=[visual_input, textual_input], outputs=output)
 
         # Задаем начальную скорость обучения и параметры косинусного расписания
-        initial_learning_rate = 0.1
+        initial_learning_rate = 1e-4  # Adam расходится при 0.1; рабочий диапазон 1e-3…1e-4
         decay_steps = 10000  # число шагов, за которое скорость обучения убывает до минимального значения
         alpha = 0.0001  # конечное значение скорости обучения будет равно initial_learning_rate * alpha
         lr_schedule = tf.keras.optimizers.schedules.CosineDecay(

@@ -34,14 +34,12 @@ class Generator:
                     img = np.load(img_paths[i])["features"]
                 gui = open(gui_paths[i], 'r')
 
-                token_sequence = [START_TOKEN]
-                for line in gui:
-                    line = line.replace("\t ", "").replace("\t", "").replace(",", " ,").replace("\n", " \n")
-                    tokens = line.split(" ")
-                    for token in tokens:
-                        voc.append(token)
-                        token_sequence.append(token)
-                token_sequence.append(END_TOKEN)
+                # Единая токенизация с Dataset.append — фильтрует пустые токены
+                # из подряд идущих пробелов (иначе KeyError: '' в sparsify_labels)
+                token_sequence = []
+                for token in Dataset.tokenize_gui(gui):
+                    voc.append(token)
+                    token_sequence.append(token)
 
                 suffix = [PLACEHOLDER] * CONTEXT_LENGTH
 

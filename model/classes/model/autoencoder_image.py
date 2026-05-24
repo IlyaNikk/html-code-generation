@@ -18,7 +18,10 @@ class autoencoder_image(AModel):
 
 		input_image = Input(shape=input_shape)
 
-		base_model = ResNet50(weights=None, input_tensor=input_image, input_shape=input_shape, include_top=False)
+		# (#5) Инициализация весами ImageNet вместо случайных: ResNet50 с нуля на ~1500
+		# изображениях не обучить, а предобученные фильтры дают сильный старт (дальше
+		# дообучается на наших данных при обучении автоэнкодера).
+		base_model = ResNet50(weights='imagenet', input_tensor=input_image, input_shape=input_shape, include_top=False)
 		encoded = Dense(512, activation='relu')(base_model.output)
 		encoded = MaxPooling2D()(encoded)
 
@@ -49,7 +52,8 @@ class autoencoder_image(AModel):
 		decoder = Model(encoded, x, name='Decoder')
 
 		self.model = Model(input_image, decoder(encoded), name='Autoencoder')
-		self.model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.0001), loss='mse', metrics=['accuracy'])
+		# (#5) 'accuracy' бессмысленна для регрессии (MSE-реконструкция) — используем MAE
+		self.model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.0001), loss='mse', metrics=['mae'])
 		print('Model Summary info')
 		self.model.summary()
 		keras.utils.plot_model(
@@ -58,8 +62,8 @@ class autoencoder_image(AModel):
 		)
 
 	def fit_generator(self, generator, steps_per_epoch, callbacks):
-		checkpoint_file_name = "{}/resnet50.weights.h5".format(self.output_path)
-		self.model.load_weights(checkpoint_file_name)
+		# checkpoint_file_name = "{}/resnet50.weights.h5".format(self.output_path)
+		# self.model.load_weights(checkpoint_file_name)
 
 		file_name = "resnet50_checkpoint_" + datetime.datetime.now().strftime("%d_%m_%Y_%H_%M") + ".weights"
 		checkpoint_filepath = "{}/{}.h5".format(self.output_path, file_name)

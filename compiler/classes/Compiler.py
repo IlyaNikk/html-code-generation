@@ -42,13 +42,9 @@ class Compiler:
         self.root = Node("body", None, self.content_holder)
         current_parent = self.root
 
-        prediction_lines = prediction.splitlines()
-        if prediction_lines[0].find("body") != -1:
-            prediction_lines = prediction_lines[1:len(prediction_lines)-1]
-
-        for token in prediction_lines:
-            token = token.replace(" ", "").replace("\n", "").replace("\t", "")
-            if len(token) == 0:
+        for token in prediction.splitlines():
+            token = token.replace(" ", "").replace("\n", "")
+            if token == "":
                 continue
 
             if token.find(self.opening_tag) != -1:
@@ -65,7 +61,12 @@ class Compiler:
                 current_parent.add_child(element)
                 current_parent = element
             elif token.find(self.closing_tag) != -1:
-                current_parent = current_parent.parent
+                # Garbage предсказания (особенно на ранних эпохах) могут содержать
+                # больше закрывающих тегов чем открывающих — не выходим за пределы
+                # корневого body, иначе current_parent станет None и следующий шаг
+                # упадёт на AttributeError: 'NoneType' object has no attribute 'parent'
+                if current_parent.parent is not None:
+                    current_parent = current_parent.parent
             else:
                 tokens = token.split(",")
                 for t in tokens:

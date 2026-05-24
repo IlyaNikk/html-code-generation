@@ -36,3 +36,6 @@ create_dataset:
 
 train_model_new_web:
 	python3 model/train.py datasets/generated/web/training_set datasets/generated/web/eval_set bin/web
+
+predict_one_web:
+	python3 model/tests/predict_one.py bin/web Main_Model.weights ${IMAGE_PATH}
