@@ -1,3 +1,5 @@
+import os
+import re
 import sys
 import keras.src.callbacks
 
@@ -5,15 +7,17 @@ sys.path.append('./')
 
 from ..Sampler import *
 from ..Utils import Utils
+from ..dataset import profiles as dataset_profiles
 from .Config import CONTEXT_LENGTH, IMAGE_SIZE
 from compiler.classes.Compiler import *
 from ..test_classes.Functional_Test import *
 from ..test_classes.BLEU import *
 
-DSL_PATH = "compiler/assets/web-dsl-mapping.json"
+# Веса (а значит и активный профиль датасета) живут здесь. DSL_PATH и input_path
+# теперь резолвятся через profiles.load() — никаких хардкодов под конкретный сет.
 trained_weights_path = "bin/web"
-input_path = "datasets/web/eval_set"
 logs_path = "resources/logs.txt"
+
 
 class TestingCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
@@ -21,27 +25,21 @@ class TestingCallback(keras.callbacks.Callback):
         input_shape = meta_dataset[0]
         output_size = meta_dataset[1]
 
+        # Resolve dataset-specific paths from the sidecar written by train.py.
+        profile = dataset_profiles.load(trained_weights_path)
+        dsl_path = profile["dsl_mapping"]
+        input_path = profile["eval_set"]
+
         sampler = Sampler(trained_weights_path, input_shape, output_size, CONTEXT_LENGTH)
-        compiler = Compiler(DSL_PATH)
+        compiler = Compiler(dsl_path)
 
         functional_test_instance = FunctionalTest(self.model, sampler, compiler, input_path)
 
-        # files = os.listdir(input_path)
-        # gui_files = list(filter(lambda s: re.search(".*\\.gui$", s), files))
-        # gui_files = gui_files[:10]
-
-        gui_files = [
-            "BD715F1F-4494-4A0C-8875-4334052D699B.gui",
-            "3E106EF6-1841-4149-BC43-0D77B00A7241.gui",
-            "1B50F242-FB10-495E-91CE-D2C2D0BB46C5.gui",
-            "967A76E0-0B09-48D6-AD4A-5E40CE51FEFD.gui",
-            "0529E00F-15B6-43BD-86FB-F15245861B07.gui",
-            "CBE1F184-0AEC-4E32-BC38-00D7B7D5B284.gui",
-            "0DF671EC-7BD9-4142-8A9D-5B438DD37323.gui",
-            "B9261BA5-39AE-4261-9F43-29F25695C821.gui",
-            "529820DE-98F5-4342-A20C-6B65580BECA7.gui",
-            "2F2F9495-4422-4B87-9F30-260974449686.gui"
-        ]
+        # Берём первые 10 .gui-файлов из eval-сета активного профиля. Раньше тут
+        # был хардкод 10 UUID из оригинального датасета, из-за чего после переключения
+        # на синтетический сет callback падал с FileNotFoundError.
+        all_gui = sorted(f for f in os.listdir(input_path) if re.search(r"\.gui$", f))
+        gui_files = all_gui[:10]
 
         with open(logs_path, 'a') as file_to_write:
             for file in gui_files:

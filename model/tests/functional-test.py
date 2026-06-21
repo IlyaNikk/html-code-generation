@@ -7,11 +7,10 @@ sys.path.append('./')
 from model.classes.model.Main_Model import *
 from model.classes.test_classes.Functional_Test import *
 from model.classes.Utils import Utils
+from model.classes.dataset import profiles as dataset_profiles
 from compiler.classes.Compiler import *
 
 argv = sys.argv[1:]
-
-dsl_path = "compiler/assets/web-dsl-mapping.json"
 
 if len(argv) < 3:
     print("Error")
@@ -21,6 +20,10 @@ else:
     trained_model_name = argv[1]
     input_path = argv[2]
     save_images = False if len(argv) < 4 else True if int(argv[3]) == 1 else False
+
+# DSL mapping подбирается под профиль обученных весов, чтобы не приходилось
+# менять константу вручную при переключении датасета.
+dsl_path = dataset_profiles.load(trained_weights_path)["dsl_mapping"]
 
 files = os.listdir(input_path)
 gui_files = list(filter(lambda s: re.search(".*\\.gui$", s), files))

@@ -1,5 +1,11 @@
+# Train on the original Beltramelli pix2code web dataset (datasets/web/).
 train_model_web:
-	python3 model/train.py datasets/web/training_set datasets/web/eval_set bin/web
+	python3 model/train.py --profile web
+
+# Train on the synthetic set produced by compiler/generate_dataset.py (datasets/generated/web/).
+# Alias `train_model_new_web` below is kept for backward compatibility.
+train_model_generated_web:
+	python3 model/train.py --profile web_generated
 
 train_model_android:
 	python3 model/train.py datasets/android/training_set datasets/android/eval_set bin/android
@@ -7,8 +13,9 @@ train_model_android:
 train_model_ios:
 	python3 model/train.py datasets/ios/training_set datasets/ios/eval_set bin/ios
 
+# Autoencoder pretraining for the web set (use --profile web to mirror train_model_web).
 train_autoencoder_web:
-	python3 model/train.py datasets/web/training_set datasets/web/eval_set bin/web 1
+	python3 model/train.py --profile web --train-autoencoder
 
 train_autoencoder_android:
 	python3 model/train.py datasets/android/training_set datasets/android/eval_set bin/android 1
@@ -34,8 +41,8 @@ autoencoder_predict:
 create_dataset:
 	python3 compiler/generate_dataset.py ${COUNT}
 
-train_model_new_web:
-	python3 model/train.py datasets/generated/web/training_set datasets/generated/web/eval_set bin/web
+# Backward-compat alias for train_model_generated_web (older docs/scripts may reference this name).
+train_model_new_web: train_model_generated_web
 
 predict_one_web:
 	python3 model/tests/predict_one.py bin/web Main_Model.weights ${IMAGE_PATH}

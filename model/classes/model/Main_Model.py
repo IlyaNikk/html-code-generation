@@ -48,10 +48,50 @@ class TokenAndPositionEmbedding(tf.keras.layers.Layer):
         return config
 
 
+@keras.saving.register_keras_serializable()
+class TokenPaddingMask(tf.keras.layers.Layer):
+    """Build an (B, 1, T) key-padding mask from one-hot tokens for MultiHeadAttention.
+
+    Returns 1.0 at positions where the token is NOT padding (PLACEHOLDER), 0.0
+    where it is. Broadcasts over MHA's query axis so attention skips PLACEHOLDER
+    positions as KEYS — the query side doesn't need a mask in our pipeline because
+    the readout uses only the last (always-real) timestep (#D2).
+
+    Registered as serializable so model_from_json() can rebuild Main_Model.
+    """
+
+    def __init__(self, pad_index, **kwargs):
+        super().__init__(**kwargs)
+        self.pad_index = pad_index
+
+    def call(self, one_hot):
+        # one_hot: (B, T, V). Channel `pad_index` is 1 where the token IS padding.
+        not_pad = 1.0 - one_hot[..., self.pad_index]            # (B, T)
+        return tf.expand_dims(not_pad, axis=1)                  # (B, 1, T)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"pad_index": self.pad_index})
+        return config
+
+
 class Main_Model(AModel):
-    def __init__(self, input_shape, output_size, output_path):
+    def __init__(self, input_shape, output_size, output_path, total_training_steps=None):
+        """
+        total_training_steps: фактическое число шагов оптимизатора за всё обучение.
+        train.py передаёт сюда `steps_per_epoch * EPOCHS`, чтобы CosineDecay-расписание
+        точно совпало с реальной длительностью прогона — иначе LR падает до ~1e-8
+        к середине обучения и модель перестаёт учиться (см. fix D1).
+
+        Инференс-скрипты (sample.py, predict_one.py, functional-test.py, …) сразу
+        после Main_Model(...) вызывают .load(), которая пересоздаёт self.model из
+        JSON и отбрасывает оптимизатор — поэтому им можно ничего сюда не передавать.
+        Для подстраховки fallback берёт оценку из Config.EPOCHS, и изменение EPOCHS
+        автоматически масштабирует расписание.
+        """
         AModel.__init__(self, input_shape, output_size, output_path)
         self.name = "Main_Model.weights"
+        self.total_training_steps = total_training_steps
 
         # Load the pre-trained autoencoder model
         autoencoder_model = autoencoder_image(input_shape, input_shape, output_path)
@@ -76,9 +116,12 @@ class Main_Model(AModel):
         for layer in hidden_layer_model_freeze.layers:
             layer.trainable = False
 
-        # Функция для трансформерного блока (encoder)
-        def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0.1):
-            x = tf.keras.layers.MultiHeadAttention(key_dim=head_size, num_heads=num_heads, dropout=dropout)(inputs, inputs)
+        # Функция для трансформерного блока (encoder).
+        # attention_mask=(B, 1, T) — маска ключей: позиции с PLACEHOLDER исключаются
+        # из внимания, чтобы не пачкать представление последнего шага (#D2).
+        def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0.1, attention_mask=None):
+            x = tf.keras.layers.MultiHeadAttention(key_dim=head_size, num_heads=num_heads, dropout=dropout)(
+                inputs, inputs, attention_mask=attention_mask)
             x = tf.keras.layers.Dropout(dropout)(x)
             x = tf.keras.layers.Add()([x, inputs])
             x = tf.keras.layers.LayerNormalization(epsilon=1e-6)(x)
@@ -108,11 +151,20 @@ class Main_Model(AModel):
         # (#3) Эмбеддинг токенов + позиционное кодирование вместо подачи one-hot напрямую,
         # чтобы трансформер видел порядок токенов в окне контекста
         embedded_text = TokenAndPositionEmbedding(CONTEXT_LENGTH, 256)(textual_input)
+
+        # (#D2) Маска для self-attention: PLACEHOLDER (vocab index 2) — это паддинг
+        # начала последовательности. Без неё в начале каждой .gui модель видит
+        # 47 «фантомных» позиций и тратит ёмкость на то, чтобы их игнорировать.
+        text_padding_mask = TokenPaddingMask(pad_index=2)(textual_input)
+
         # Применяем трансформерный блок к текстовой последовательности
-        encoded_text = transformer_encoder(embedded_text, head_size=64, num_heads=4, ff_dim=512, dropout=0.1)
+        encoded_text = transformer_encoder(embedded_text, head_size=64, num_heads=4, ff_dim=512, dropout=0.1,
+                                           attention_mask=text_padding_mask)
 
         # (#6) Вместо конкатенации одного и того же изображения на каждый шаг —
-        # кросс-внимание: каждый текстовый токен выбирает релевантные регионы макета
+        # кросс-внимание: каждый текстовый токен выбирает релевантные регионы макета.
+        # Маска ключей тут не нужна — image_regions не содержат паддинга, а на стороне
+        # queries финальный readout берёт только последний шаг (всегда реальный токен).
         combined = cross_attention_block(encoded_text, image_regions, num_heads=4, key_dim=64, ff_dim=256, dropout=0.1)
         # (#4) Берём представление ПОСЛЕДНЕГО шага окна (самый свежий токен — главный предиктор
         # следующего), а не GlobalAveragePooling по всей последовательности, которое размывало
@@ -124,10 +176,20 @@ class Main_Model(AModel):
 
         self.model = Model(inputs=[visual_input, textual_input], outputs=output)
 
-        # Задаем начальную скорость обучения и параметры косинусного расписания
+        # Задаём косинусное расписание LR. Раньше decay_steps было захардкожено в 10000,
+        # из-за чего при EPOCHS=20 и ~700 шагах/эпоху схема к step≈10000 (≈14-й эпохе)
+        # клампилась в floor=1e-8 и обучение фактически замирало. Теперь decay_steps
+        # вычисляется из реальной длительности прогона — изменение EPOCHS или размера
+        # датасета автоматически перепересчитывает расписание.
         initial_learning_rate = 1e-4  # Adam расходится при 0.1; рабочий диапазон 1e-3…1e-4
-        decay_steps = 10000  # число шагов, за которое скорость обучения убывает до минимального значения
-        alpha = 0.0001  # конечное значение скорости обучения будет равно initial_learning_rate * alpha
+        if self.total_training_steps is not None:
+            decay_steps = self.total_training_steps
+        else:
+            # Fallback for inference (model.load() выбросит оптимизатор всё равно)
+            # и для legacy-вызовов: оценка по EPOCHS с реалистичным шагов/эпоху для web-сета.
+            APPROX_STEPS_PER_EPOCH = 700  # ~1500 .gui × ~30 окон / batch 64
+            decay_steps = APPROX_STEPS_PER_EPOCH * EPOCHS
+        alpha = 0.01  # пол LR = 1% от initial = 1e-6, а не "мёртвый" 1e-8 как было раньше
         lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=initial_learning_rate,
             decay_steps=decay_steps,

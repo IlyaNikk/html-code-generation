@@ -7,9 +7,12 @@ import numpy as np
 
 from model.classes.model.Main_Model import *
 from model.classes.Utils import Utils
+from model.classes.dataset import profiles as dataset_profiles
 from compiler.classes.Compiler import Compiler
 
-DSL_PATH = "compiler/assets/web-dsl-mapping.json"
+# DSL_PATH теперь определяется по training_profile.txt в каталоге весов
+# (см. classes/dataset/profiles.py). Раньше был хардкод под оригинальный
+# датасет — после переобучения на синтетике он указывал не туда.
 TEXT_PLACE_HOLDER = "[]"
 
 
@@ -77,8 +80,9 @@ def main():
         f.write(gui_text)
     print("  DSL:        {}".format(gui_out))
 
-    # Compile to HTML
-    compiler = Compiler(DSL_PATH)
+    # Compile to HTML using the DSL mapping recorded at training time.
+    dsl_path = dataset_profiles.load(trained_weights_path)["dsl_mapping"]
+    compiler = Compiler(dsl_path)
     html_out = os.path.join(output_dir, "{}.predicted.html".format(stem))
     html = None
     try:
