@@ -9,6 +9,7 @@ import sys
 
 from os.path import basename
 from classes.Sampler import *
+from classes.Utils import Utils
 from classes.model.Main_Model import *
 import tensorflow as tf
 
@@ -37,13 +38,13 @@ model.load(trained_model_name)
 sampler = Sampler(trained_weights_path, input_shape, output_size, CONTEXT_LENGTH)
 
 file_name = basename(input_path)[:basename(input_path).find(".")]
-img = tf.keras.utils.load_img(
-    input_path, target_size=(IMAGE_SIZE, IMAGE_SIZE)
-)
-evaluation_img = tf.keras.utils.img_to_array(img)
+# Та же предобработка, что и при обучении (BGR + /255), иначе train/test skew
+evaluation_img = Utils.get_preprocessed_img(input_path, IMAGE_SIZE)
 
 if search_method == "greedy":
-    result, _ = sampler.predict_greedy(model, np.array([evaluation_img]))
+    # while_testing=True — model здесь обёртка Main_Model, а не сырой Keras Model;
+    # без флага Sampler передаёт batch_size= в Main_Model.predict и падает с TypeError.
+    result, _ = sampler.predict_greedy(model, np.array([evaluation_img]), while_testing=True)
     print("Result greedy: {}".format(result))
 
 with open("{}/{}.gui".format(output_path, file_name), 'w') as out_f:

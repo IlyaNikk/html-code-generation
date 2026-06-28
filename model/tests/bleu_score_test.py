@@ -5,6 +5,7 @@ import re
 sys.path.append('./')
 
 from model.classes.model.Main_Model import *
+from model.classes.Utils import Utils
 
 argv = sys.argv[1:]
 
@@ -41,10 +42,9 @@ print(gui_files)
 for file in gui_files:
     gui_name = file.replace(".gui", "")
 
-    img = tf.keras.utils.load_img(
-        "{}/{}.png".format(input_path, gui_name), target_size=(IMAGE_SIZE, IMAGE_SIZE)
-    )
-    evaluation_img = tf.keras.utils.img_to_array(img)
+    # Та же предобработка, что и при обучении (BGR + /255), иначе train/test skew
+    evaluation_img = Utils.get_preprocessed_img(
+        "{}/{}.png".format(input_path, gui_name), IMAGE_SIZE)
 
     result, _ = sampler.predict_greedy(model, np.array([evaluation_img]), while_testing=True)
     print('result: {}'.format(result))

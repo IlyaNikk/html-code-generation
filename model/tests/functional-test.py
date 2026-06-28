@@ -6,11 +6,11 @@ sys.path.append('./')
 
 from model.classes.model.Main_Model import *
 from model.classes.test_classes.Functional_Test import *
+from model.classes.Utils import Utils
+from model.classes.dataset import profiles as dataset_profiles
 from compiler.classes.Compiler import *
 
 argv = sys.argv[1:]
-
-dsl_path = "compiler/assets/web-dsl-mapping.json"
 
 if len(argv) < 3:
     print("Error")
@@ -21,6 +21,10 @@ else:
     input_path = argv[2]
     save_images = False if len(argv) < 4 else True if int(argv[3]) == 1 else False
 
+# DSL mapping подбирается под профиль обученных весов, чтобы не приходилось
+# менять константу вручную при переключении датасета.
+dsl_path = dataset_profiles.load(trained_weights_path)["dsl_mapping"]
+
 files = os.listdir(input_path)
 gui_files = list(filter(lambda s: re.search(".*\\.gui$", s), files))
 png_files = list(filter(lambda s: re.search(".*\\.png$", s), files))
@@ -29,7 +33,7 @@ if len(gui_files) != len(png_files):
     print("Error")
     exit(0)
 
-gui_files = gui_files[:10]
+gui_files = gui_files[:1]
 
 # load model params
 meta_dataset = np.load("{}/meta_dataset.npy".format(trained_weights_path), allow_pickle=True)
@@ -47,10 +51,9 @@ functional_test_instance = FunctionalTest(model, sampler, compiler, input_path)
 for file in gui_files:
     gui_name = file.replace(".gui", "")
 
-    img = tf.keras.utils.load_img(
-        "{}/{}.png".format(input_path, gui_name), target_size=(IMAGE_SIZE, IMAGE_SIZE)
-    )
-    evaluation_img = tf.keras.utils.img_to_array(img)
+    # Та же предобработка, что и при обучении (BGR + /255), иначе train/test skew
+    evaluation_img = Utils.get_preprocessed_img(
+        "{}/{}.png".format(input_path, gui_name), IMAGE_SIZE)
 
     result, _ = sampler.predict_greedy(model, np.array([evaluation_img]), while_testing=True)
     result = result.replace(START_TOKEN, "").replace(END_TOKEN, "")

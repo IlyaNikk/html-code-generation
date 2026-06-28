@@ -84,20 +84,38 @@ class Dataset:
         self.partial_sequences = np.array(self.partial_sequences)
         self.next_words = np.array(self.next_words)
 
+    @staticmethod
+    def tokenize_gui(gui):
+        """Yield framed token stream from a .gui file iterable: <START>, ...tokens..., <END>.
+
+        Единый источник правды для токенизации DSL — используется и при построении словаря
+        (Dataset.append), и при стриминге батчей (Generator.data_generator). Фильтрует пустые
+        токены, которые иначе появляются из подряд идущих пробелов в строках с отступами
+        (иначе '' попадал в словарь и валил воркер с KeyError: ''). Также убирает табы,
+        чтобы поведение не зависело от стиля отступов в .gui.
+        """
+        yield START_TOKEN
+        for line in gui:
+            line = (line.replace("\t ", "")
+                        .replace("\t", "")
+                        .replace(",", " ,")
+                        .replace("\n", " \n"))
+            for token in line.split(" "):
+                if token == "":
+                    continue
+                yield token
+        yield END_TOKEN
+
     def append(self, sample_id, gui, img, to_show=False):
         if to_show:
             pic = img * 255
             pic = np.array(pic, dtype=np.uint8)
             Utils.show(pic)
 
-        token_sequence = [START_TOKEN]
-        for line in gui:
-            line = line.replace("\t ", "").replace("\t", "").replace(",", " ,").replace("\n", " \n")
-            tokens = line.split(" ")
-            for token in tokens:
-                self.voc.append(token)
-                token_sequence.append(token)
-        token_sequence.append(END_TOKEN)
+        token_sequence = []
+        for token in Dataset.tokenize_gui(gui):
+            self.voc.append(token)
+            token_sequence.append(token)
 
         suffix = [PLACEHOLDER] * CONTEXT_LENGTH
 
