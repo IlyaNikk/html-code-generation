@@ -3,12 +3,18 @@ __author__ = 'Taneem Jan, taneemishere.github.io'
 
 import keras.src.callbacks
 import datetime
-from keras.layers import Input, MaxPooling2D, Conv2DTranspose, Reshape, Dense, MaxPooling2D, BatchNormalization, ReLU
+from keras.layers import (Input, MaxPooling2D, Conv2DTranspose, Reshape, Dense,
+                          MaxPooling2D, BatchNormalization, ReLU, Rescaling, Normalization)
 from keras.models import Sequential, Model
 from tensorflow.keras.applications.resnet50 import ResNet50
 from keras import *
 from .Config import *
 from .AModel import *
+
+
+# Caffe-style ImageNet BGR mean (channel-last, BGR order — matches what
+# Utils.get_preprocessed_img produces via cv2.imread).
+IMAGENET_BGR_MEAN = [103.939, 116.779, 123.68]
 
 
 class autoencoder_image(AModel):
@@ -18,16 +24,29 @@ class autoencoder_image(AModel):
 
 		input_image = Input(shape=input_shape)
 
+		# (opt #3) Превращаем [0,1] BGR (как отдаёт Utils.get_preprocessed_img) в
+		# Caffe-style preprocessing, которого ждут предобученные ImageNet-фильтры
+		# ResNet50: умножаем на 255 и вычитаем mean. Оба слоя встроенные,
+		# JSON-сериализуемые, поэтому AModel.load() корректно восстановит модель.
+		scaled = Rescaling(scale=255.0, name='scale_to_255')(input_image)
+		preprocessed = Normalization(
+			axis=-1, mean=IMAGENET_BGR_MEAN, variance=[1.0, 1.0, 1.0],
+			name='imagenet_mean_subtract')(scaled)
+
 		# (#5) Инициализация весами ImageNet вместо случайных: ResNet50 с нуля на ~1500
 		# изображениях не обучить, а предобученные фильтры дают сильный старт (дальше
 		# дообучается на наших данных при обучении автоэнкодера).
-		base_model = ResNet50(weights='imagenet', input_tensor=input_image, input_shape=input_shape, include_top=False)
-		encoded = Dense(512, activation='relu')(base_model.output)
-		encoded = MaxPooling2D()(encoded)
+		base_model = ResNet50(weights='imagenet', input_tensor=preprocessed, input_shape=input_shape, include_top=False)
+		# (opt #2) Именуем верхний слой энкодера, чтобы Main_Model мог тапнуть его
+		# напрямую и получить (8, 8, 512) = 64 региона вместо (4, 4, 512) = 16
+		# после MaxPooling. Реконструкция автоэнкодера всё ещё идёт через бутылочное
+		# горлышко — только Main_Model видит более высокое разрешение.
+		encoded = Dense(512, activation='relu', name='encoder_features')(base_model.output)
+		encoded_bottleneck = MaxPooling2D()(encoded)
 
-		self.encoder = Model(input_image, encoded, name='ResNet50_Encoder')
+		self.encoder = Model(input_image, encoded_bottleneck, name='ResNet50_Encoder')
 
-		x = Conv2DTranspose(512, (3, 3), strides=(2, 2), padding='same')(encoded)
+		x = Conv2DTranspose(512, (3, 3), strides=(2, 2), padding='same')(encoded_bottleneck)
 		x = BatchNormalization()(x)
 		x = ReLU()(x)
 
@@ -49,9 +68,9 @@ class autoencoder_image(AModel):
 
 		x = Conv2DTranspose(3, (3, 3), strides=(2, 2), padding='same', activation='sigmoid')(x)
 
-		decoder = Model(encoded, x, name='Decoder')
+		decoder = Model(encoded_bottleneck, x, name='Decoder')
 
-		self.model = Model(input_image, decoder(encoded), name='Autoencoder')
+		self.model = Model(input_image, decoder(encoded_bottleneck), name='Autoencoder')
 		# (#5) 'accuracy' бессмысленна для регрессии (MSE-реконструкция) — используем MAE
 		self.model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.0001), loss='mse', metrics=['mae'])
 		print('Model Summary info')

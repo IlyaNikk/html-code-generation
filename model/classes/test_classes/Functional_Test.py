@@ -9,7 +9,13 @@ from playwright.sync_api import sync_playwright
 
 from ..Vocabulary import START_TOKEN, END_TOKEN
 from ..model.Config import IMAGE_SIZE
-from compiler.classes.Utils import *
+# Импортируем под алиасом, чтобы wildcard-импорты этого модуля (например,
+# `from ..test_classes.Functional_Test import *` в Main_Model_Testing_Callback)
+# не переопределяли `Utils` в чужих неймспейсах. В этом репо есть ДВА класса Utils:
+# `model.classes.Utils` (картинки, sparsify) и `compiler.classes.Utils` (рендер DSL).
+# Импорт через * затирал тот, что нужен для get_preprocessed_img в TestingCallback,
+# и обучение падало с AttributeError на конце первой эпохи.
+from compiler.classes.Utils import Utils as CompilerUtils
 
 TEXT_PLACE_HOLDER = "[]"
 
@@ -30,8 +36,8 @@ class FunctionalTest:
 
         # print("Functional result: {}".format(result))
 
-        master_html = self.compiler.compile_in_runtime(master_gui, rendering_function=Utils.render_content_with_text)
-        compiled_after_prediction_html = self.compiler.compile_in_runtime(result, rendering_function=Utils.render_content_with_text)
+        master_html = self.compiler.compile_in_runtime(master_gui, rendering_function=CompilerUtils.render_content_with_text)
+        compiled_after_prediction_html = self.compiler.compile_in_runtime(result, rendering_function=CompilerUtils.render_content_with_text)
 
         with sync_playwright() as p:
             browser = p.webkit.launch()

@@ -70,7 +70,16 @@ def run(input_path, input_validation_path, output_path, profile_name, train_auto
     gui_validation_paths, img_validation_paths = Dataset.load_paths_only(input_validation_path)
     input_validation_shape = validation_dataset.input_shape
 
-    validation_steps = int(validation_dataset.size / BATCH_SIZE)
+    # Cap validation batches per epoch. validation_dataset.size counts SLIDING WINDOWS
+    # (~30 per .gui), so 250 eval files balloon to ~117 batches at batch_size=64 — на CPU
+    # это 5–10 минут «тихой» валидации между концом тренировочной фазы и началом
+    # on_epoch_end callbacks, из-за чего TestingCallback не успевает напечатать ничего
+    # видимого. Реальное качество мерим в TestingCallback (BLEU/diff на полном eval-сете),
+    # а val_loss оставляем как быстрый шумный сигнал по ~20 батчам.
+    VAL_STEPS_CAP = 50
+    full_val_steps = max(1, int(validation_dataset.size / BATCH_SIZE))
+    validation_steps = min(VAL_STEPS_CAP, full_val_steps)
+    print("[train] validation_steps={} (capped from {})".format(validation_steps, full_val_steps), flush=True)
 
     validation_generator = Generator.data_generator(
         voc,
@@ -81,10 +90,11 @@ def run(input_path, input_validation_path, output_path, profile_name, train_auto
         generate_binary_sequences=True
     )
 
-    # Генератор для изображений (для автоэнкодера)
-    generator_images = Generator.data_generator(voc, gui_paths, img_paths, batch_size=BATCH_SIZE,
-                                                input_shape=input_shape, generate_binary_sequences=True,
-                                                images_only=True)
+    # (opt #1) Отдельный генератор для автоэнкодера — итерируется по уникальным
+    # изображениям, без раздувания DSL sliding-window'ом (раньше один и тот же
+    # img попадал в батч ~30 раз, гробя batch-эффективную численность).
+    generator_images = Generator.image_only_generator(img_paths, batch_size=BATCH_SIZE)
+    ae_steps_per_epoch = max(1, len(img_paths) // BATCH_SIZE)
 
     # Создаем директорию для логов TensorBoard, если её нет
     log_dir_autoencoder = os.path.join(output_path, "logs_autoencoder")
@@ -106,7 +116,8 @@ def run(input_path, input_validation_path, output_path, profile_name, train_auto
     # For training of autoencoders
     if train_autoencoder:
         autoencoder_model = autoencoder_image(input_shape, input_shape, output_path)
-        autoencoder_model.fit_generator(generator_images, steps_per_epoch=steps_per_epoch,
+        # ae_steps_per_epoch использует len(img_paths), а не dataset.size (sliding windows).
+        autoencoder_model.fit_generator(generator_images, steps_per_epoch=ae_steps_per_epoch,
                                         callbacks=[tensorboard_callback_autoencoder, batch_tensorboard_callback_autoencoder])
         clear_session()
 

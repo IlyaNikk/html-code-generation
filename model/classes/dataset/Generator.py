@@ -13,6 +13,30 @@ from ..model.Config import *
 
 class Generator:
     @staticmethod
+    def image_only_generator(img_paths, batch_size):
+        """(opt #1) Iterate UNIQUE images for autoencoder training.
+
+        The default data_generator expands each .gui into ~30 sliding windows and pushes
+        the same image into the batch once per window. For autoencoder training that's
+        pure waste: ~30× duplicated samples per epoch, correlated gradients in every batch.
+        This generator emits one batch entry per unique image, shuffled each epoch.
+        """
+        indices = list(range(len(img_paths)))
+        while True:
+            random.shuffle(indices)
+            batch = []
+            for i in indices:
+                if img_paths[i].endswith('.png'):
+                    img = Utils.get_preprocessed_img(img_paths[i], IMAGE_SIZE)
+                else:
+                    img = np.load(img_paths[i])['features']
+                batch.append(img)
+                if len(batch) == batch_size:
+                    arr = np.array(batch)
+                    yield arr, arr
+                    batch = []
+
+    @staticmethod
     def data_generator(voc, gui_paths, img_paths, batch_size, input_shape, generate_binary_sequences=False,
                        verbose=False, loop_only_one=False, images_only=False):
         assert len(gui_paths) == len(img_paths)
@@ -24,10 +48,12 @@ class Generator:
             batch_next_words = []
             sample_in_batch_counter = 0
 
-            for k in range(0, len(gui_paths)):
-                i = random.randint(0, len(gui_paths) - 1)
-                if 0 > i or i >= len(gui_paths):
-                    i = 0
+            # (opt #4) Перемешивание БЕЗ замены: раньше тут было random.randint в цикле,
+            # из-за чего ~37% картинок не попадали в эпоху, а другие повторялись по 2-3 раза.
+            # Теперь за эпоху каждая картинка увидена ровно один раз.
+            indices = list(range(len(gui_paths)))
+            random.shuffle(indices)
+            for i in indices:
                 if img_paths[i].find(".png") != -1:
                     img = Utils.get_preprocessed_img(img_paths[i], IMAGE_SIZE)
                 else:

@@ -100,8 +100,11 @@ class Main_Model(AModel):
 
         visual_input = Input(shape=input_shape)
 
+        # (opt #2) Тапаем layer ДО MaxPooling2D — получаем (8, 8, 512) = 64 региона
+        # для кросс-внимания вместо (4, 4, 512) = 16 регионов. Реконструкция автоэнкодера
+        # всё ещё идёт через бутылочное горлышко, так что качество фич не теряется.
         hidden_layer_model_freeze = Model(inputs=autoencoder_model.model.input,
-                                          outputs=autoencoder_model.model.get_layer('max_pooling2d').output)
+                                          outputs=autoencoder_model.model.get_layer('encoder_features').output)
         hidden_layer_input = hidden_layer_model_freeze(visual_input)
         # (#6) Сохраняем пространственную структуру карты признаков как последовательность
         # «регионов» изображения, а не сворачиваем её в один глобальный вектор, который
