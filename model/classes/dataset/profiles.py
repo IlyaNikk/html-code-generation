@@ -1,10 +1,11 @@
 """Dataset profiles — centralises every per-dataset knob (training/eval paths,
-DSL mapping) so changing datasets is one CLI flag, not edits in four files.
+DSL mapping, weights output path) so changing datasets is one CLI flag, not edits
+in four files.
 
 Workflow:
     1. train.py picks a profile (`--profile web` / `--profile web_generated`),
-       resolves paths from PROFILES, and writes the profile NAME into
-       `<output_path>/training_profile.txt`.
+       resolves paths/output_dir from PROFILES, and writes the profile NAME into
+       `<output_dir>/training_profile.txt`.
     2. Downstream scripts (predict_one.py, functional-test.py, the in-training
        TestingCallback, …) call `profiles.load(weights_path)` to get the same
        profile dict back without being told. No more hardcoded DSL_PATH /
@@ -20,11 +21,17 @@ PROFILES = {
         "training_set": "datasets/web/training_set",
         "eval_set":     "datasets/web/eval_set",
         "dsl_mapping":  "compiler/assets/web-dsl-mapping.json",
+        "output_dir":   "bin/web",
     },
     "web_generated": {             # synthetic set from compiler/generate_dataset.py
-        "training_set": "datasets/generated/web/training_set",
-        "eval_set":     "datasets/generated/web/eval_set",
+        "training_set": "datasets/generated/web/article/training_set",
+        "eval_set":     "datasets/generated/web/article/eval_set",
         "dsl_mapping":  "compiler/assets/web-dsl-mapping-new.json",
+        "output_dir":   "bin/web/correct/new_metrics",
+        # Faster research iteration: each Keras epoch consumes half of the
+        # sliding-window batches. Use train.py --steps-fraction 1.0 for final
+        # full-step article runs.
+        "train_steps_fraction": 0.5,
     },
 }
 
