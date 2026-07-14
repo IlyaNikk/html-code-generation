@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import tempfile
+from collections import Counter
 from difflib import SequenceMatcher
 
 sys.path.append('./')
@@ -28,6 +29,13 @@ from model.classes.test_classes.BLEU import BLEU
 DEFAULT_RULES_PATH = "compiler/assets/rules-for-generate.json"
 DEFAULT_MODEL_NAME = "Main_Model.weights"
 DEFAULT_VIEWPORT = {"width": 1280, "height": 2860}
+REWARD_VERSION = "content_structural_v4"
+BUTTON_TOKENS = {"btn-active", "btn-inactive", "btn-green", "btn-orange", "btn-red"}
+TEXT_TOKENS = {"big-title", "small-title", "text"}
+LAYOUT_TOKENS = {
+    "body", "header", "main", "footer", "row", "single", "double", "quadruple",
+    "carousel-wrapper", "carousel-indicator-wrappers", "carousel-content-wrapper"
+}
 
 
 class DslNode:
@@ -53,7 +61,7 @@ def parse_dsl_tree(dsl_text):
     edges = []
 
     for raw_line in clean_prediction(dsl_text).splitlines():
-        token = raw_line.replace(" ", "").replace("\n", "")
+        token = re.sub(r"\s+", "", raw_line)
         if token == "":
             continue
 
@@ -131,6 +139,49 @@ def tree_similarity(predicted_root, target_root):
     return SequenceMatcher(None, predicted, target).ratio()
 
 
+def counter_scores(predicted_items, target_items, allowed_items=None):
+    if allowed_items is not None:
+        predicted_items = [item for item in predicted_items if item in allowed_items]
+        target_items = [item for item in target_items if item in allowed_items]
+
+    predicted = Counter(predicted_items)
+    target = Counter(target_items)
+    predicted_total = sum(predicted.values())
+    target_total = sum(target.values())
+
+    if predicted_total == 0 and target_total == 0:
+        return 1.0, 1.0, 1.0
+    if predicted_total == 0 or target_total == 0:
+        return 0.0, 0.0, 0.0
+
+    overlap = sum((predicted & target).values())
+    precision = overlap / float(predicted_total)
+    recall = overlap / float(target_total)
+    if precision + recall == 0:
+        return precision, recall, 0.0
+    return precision, recall, 2.0 * precision * recall / (precision + recall)
+
+
+def structure_content_scores(predicted_tokens, target_tokens, predicted_edges, target_edges):
+    token_precision, token_recall, token_f1 = counter_scores(predicted_tokens, target_tokens)
+    edge_precision, edge_recall, edge_f1 = counter_scores(predicted_edges, target_edges)
+    _, _, button_token_f1 = counter_scores(predicted_tokens, target_tokens, BUTTON_TOKENS)
+    _, _, text_token_f1 = counter_scores(predicted_tokens, target_tokens, TEXT_TOKENS)
+    _, _, layout_token_f1 = counter_scores(predicted_tokens, target_tokens, LAYOUT_TOKENS)
+
+    return {
+        "token_precision": float(token_precision),
+        "token_recall": float(token_recall),
+        "token_f1": float(token_f1),
+        "parent_edge_precision": float(edge_precision),
+        "parent_edge_recall": float(edge_recall),
+        "parent_edge_f1": float(edge_f1),
+        "button_token_f1": float(button_token_f1),
+        "text_token_f1": float(text_token_f1),
+        "layout_token_f1": float(layout_token_f1),
+    }
+
+
 def render_html_to_png(html, output_path):
     with sync_playwright() as p:
         browser = p.webkit.launch()
@@ -187,6 +238,50 @@ def target_complexity_bucket(target_length):
     return "long"
 
 
+def length_score(length_ratio):
+    return max(0.0, 1.0 - abs(1.0 - length_ratio))
+
+
+def reward_components(row):
+    syntax_valid = safe_float(row["syntax_valid"])
+    render_success = safe_float(row["render_success"])
+    hit_sequence_limit = safe_float(row["hit_sequence_limit"])
+    ended_too_early = safe_float(row["ended_too_early"])
+    ratio = safe_float(row["length_ratio"])
+    overlong = 1.0 if ratio > 1.25 else 0.0
+    score_length = length_score(ratio)
+
+    # Quality terms sum to 1.0. Syntax and rendering are requirements: they only
+    # reduce the reward when broken, instead of hiding content mistakes.
+    reward_base = (
+        0.10 * safe_float(row["visual_score"])
+        + 0.20 * safe_float(row["parent_edge_f1"])
+        + 0.18 * safe_float(row["token_f1"])
+        + 0.16 * safe_float(row["button_token_f1"])
+        + 0.16 * safe_float(row["text_token_f1"])
+        + 0.10 * score_length
+        + 0.05 * safe_float(row["chrf"])
+        + 0.05 * safe_float(row["tree_similarity"])
+    )
+
+    reward_penalty = (
+        0.25 * (1.0 - syntax_valid)
+        + 0.25 * (1.0 - render_success)
+        + 0.20 * ended_too_early
+        + 0.25 * overlong
+        + 0.15 * hit_sequence_limit
+    )
+    reward = max(0.0, min(1.0, reward_base - reward_penalty))
+
+    return {
+        "length_score": float(score_length),
+        "overlong": int(overlong),
+        "reward_base": float(reward_base),
+        "reward_penalty": float(reward_penalty),
+        "reward": float(reward),
+    }
+
+
 def add_group_summary(summary, name, rows):
     summary[name] = {"samples": len(rows)}
     if len(rows) == 0:
@@ -194,8 +289,10 @@ def add_group_summary(summary, name, rows):
 
     fields = [
         "syntax_valid", "render_success", "tree_similarity", "bleu", "chrf",
-        "visual_score", "prediction_length", "target_length",
-        "length_ratio", "ended_too_early"
+        "visual_score", "token_f1", "parent_edge_f1", "button_token_f1",
+        "text_token_f1", "layout_token_f1", "prediction_length", "target_length",
+        "length_ratio", "length_score", "ended_too_early", "overlong",
+        "reward_base", "reward_penalty", "reward"
     ]
     for field in fields:
         values = [safe_float(row[field]) for row in rows]
@@ -204,14 +301,20 @@ def add_group_summary(summary, name, rows):
 
     summary[name]["syntax_invalid_rate"] = 1.0 - summary[name]["syntax_valid_mean"]
     summary[name]["render_failure_rate"] = 1.0 - summary[name]["render_success_mean"]
+    summary[name]["overlong_rate"] = summary[name]["overlong_mean"]
 
 
 def summarize(rows):
     numeric_fields = [
         "bleu", "bleu_1", "bleu_2", "bleu_3", "bleu_4", "chrf",
         "image_diff", "visual_score", "grammar_validity", "tree_similarity",
+        "token_precision", "token_recall", "token_f1",
+        "parent_edge_precision", "parent_edge_recall", "parent_edge_f1",
+        "button_token_f1", "text_token_f1", "layout_token_f1",
         "syntax_valid", "render_success", "prediction_length",
-        "target_length", "length_ratio", "ended_too_early", "hit_sequence_limit"
+        "target_length", "length_ratio", "length_score", "ended_too_early",
+        "overlong", "reward_base", "reward_penalty", "reward",
+        "hit_sequence_limit"
     ]
     summary = {"samples": len(rows)}
     if len(rows) == 0:
@@ -224,6 +327,7 @@ def summarize(rows):
 
     summary["render_failure_rate"] = 1.0 - summary["render_success_mean"]
     summary["syntax_invalid_rate"] = 1.0 - summary["syntax_valid_mean"]
+    summary["overlong_rate"] = summary["overlong_mean"]
     for bucket in ["short", "medium", "long"]:
         add_group_summary(
             summary,
@@ -236,6 +340,7 @@ def summarize(rows):
 def add_run_config(summary, args, input_path, files):
     summary["run_config"] = {
         "profile": args.profile,
+        "reward_version": REWARD_VERSION,
         "mode": args.mode,
         "input_path": input_path,
         "limit": args.limit,
@@ -256,8 +361,11 @@ def write_outputs(rows, summary, output_dir):
         "sample", "mode", "bleu", "bleu_1", "bleu_2", "bleu_3", "bleu_4", "chrf",
         "image_diff", "visual_score", "render_success", "render_error",
         "syntax_valid", "syntax_errors", "grammar_validity", "grammar_valid_edges",
-        "grammar_total_edges", "tree_similarity", "prediction_length",
+        "grammar_total_edges", "tree_similarity", "token_precision", "token_recall",
+        "token_f1", "parent_edge_precision", "parent_edge_recall", "parent_edge_f1",
+        "button_token_f1", "text_token_f1", "layout_token_f1", "prediction_length",
         "target_length", "target_complexity", "length_ratio", "ended_too_early",
+        "overlong", "length_score", "reward_base", "reward_penalty", "reward",
         "hit_sequence_limit"
     ]
 
@@ -286,7 +394,7 @@ def parse_args(argv):
     parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
     parser.add_argument("--input-path", default=None, help="eval set path")
     parser.add_argument("--rules-path", default=DEFAULT_RULES_PATH)
-    parser.add_argument("--mode", default="greedy", choices=["greedy"])
+    parser.add_argument("--mode", default="greedy", choices=["greedy", "constrained"])
     parser.add_argument("--sequence-length", type=int, default=150)
     parser.add_argument("--limit", type=int, default=0, help="0 means all eval samples")
     parser.add_argument("--min-target-length", type=int, default=0, help="keep samples with at least this many target tokens")
@@ -369,12 +477,21 @@ def main(argv):
             IMAGE_SIZE
         )
 
-        raw_prediction, _ = sampler.predict_greedy(
-            model,
-            np.array([evaluation_img]),
-            sequence_length=args.sequence_length,
-            while_testing=True
-        )
+        if args.mode == "constrained":
+            raw_prediction, _ = sampler.predict_constrained(
+                model,
+                np.array([evaluation_img]),
+                rules_path=args.rules_path,
+                sequence_length=args.sequence_length,
+                while_testing=True
+            )
+        else:
+            raw_prediction, _ = sampler.predict_greedy(
+                model,
+                np.array([evaluation_img]),
+                sequence_length=args.sequence_length,
+                while_testing=True
+            )
         predicted_gui = clean_prediction(raw_prediction)
 
         with open(os.path.join(prediction_dir, "{}.predicted.gui".format(gui_name)), "w") as f:
@@ -383,10 +500,16 @@ def main(argv):
             f.write(target_gui)
 
         predicted_root, predicted_tokens, predicted_edges, syntax_errors = parse_dsl_tree(predicted_gui)
-        target_root, target_tokens, _, _ = parse_dsl_tree(target_gui)
+        target_root, target_tokens, target_edges, _ = parse_dsl_tree(target_gui)
         syntax_valid = 1 if len(syntax_errors) == 0 and len(predicted_tokens) > 0 else 0
         grammar_score, grammar_valid_edges, grammar_total_edges = grammar_validity(predicted_edges, relations)
         tree_score = tree_similarity(predicted_root, target_root)
+        content_scores = structure_content_scores(
+            predicted_tokens,
+            target_tokens,
+            predicted_edges,
+            target_edges
+        )
 
         try:
             bleu = BLEU.get_bleu_score(predicted_gui, gui_name, input_path)
@@ -431,6 +554,15 @@ def main(argv):
             "grammar_valid_edges": grammar_valid_edges,
             "grammar_total_edges": grammar_total_edges,
             "tree_similarity": float(tree_score),
+            "token_precision": content_scores["token_precision"],
+            "token_recall": content_scores["token_recall"],
+            "token_f1": content_scores["token_f1"],
+            "parent_edge_precision": content_scores["parent_edge_precision"],
+            "parent_edge_recall": content_scores["parent_edge_recall"],
+            "parent_edge_f1": content_scores["parent_edge_f1"],
+            "button_token_f1": content_scores["button_token_f1"],
+            "text_token_f1": content_scores["text_token_f1"],
+            "layout_token_f1": content_scores["layout_token_f1"],
             "prediction_length": len(predicted_tokens),
             "target_length": len(target_tokens),
             "target_complexity": target_complexity_bucket(len(target_tokens)),
@@ -445,6 +577,7 @@ def main(argv):
             ),
             "hit_sequence_limit": 1 if len(predicted_tokens) >= args.sequence_length else 0,
         }
+        row.update(reward_components(row))
         rows.append(row)
 
     summary = summarize(rows)

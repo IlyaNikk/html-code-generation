@@ -54,6 +54,9 @@ functional_for_generated_web_diff:
 eval_extended_web:
 	python3 model/tests/evaluate_extended.py --profile ${PROFILE} --mode ${MODE} --limit ${LIMIT} --sequence-length ${SEQUENCE_LENGTH} --min-target-length ${MIN_TARGET_LENGTH} --max-target-length ${MAX_TARGET_LENGTH}
 
+eval_constrained_web:
+	python3 model/tests/evaluate_extended.py --profile ${PROFILE} --mode constrained --limit ${LIMIT} --sequence-length ${SEQUENCE_LENGTH} --min-target-length ${MIN_TARGET_LENGTH} --max-target-length ${MAX_TARGET_LENGTH}
+
 compile_gui:
 	python3 ./compiler/web-compiler.py ${PATH}
 
