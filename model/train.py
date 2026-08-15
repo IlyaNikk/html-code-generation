@@ -17,6 +17,7 @@ when you switch datasets.
 """
 
 import argparse
+import json
 import os
 import tensorflow as tf
 
@@ -35,14 +36,10 @@ from keras.backend import clear_session
 from tensorflow.keras.callbacks import TensorBoard
 
 
-# Default output directory — currently every profile trains into bin/web (the
-# autoencoder weights are shared between web variants). If android/ios ever
-# diverge, add an "output_dir" field per profile in profiles.py.
-DEFAULT_OUTPUT_PATH = "bin/web"
-
-
-def run(input_path, input_validation_path, output_path, profile_name, train_autoencoder=False):
-    np.random.seed(1234)
+def run(input_path, input_validation_path, output_path, profile_name, train_autoencoder=False,
+        train_steps_fraction=1.0, random_seed=1234):
+    np.random.seed(random_seed)
+    tf.random.set_seed(random_seed)
 
     dataset = Dataset()
     dataset.load(input_path, generate_binary_sequences=True)
@@ -51,12 +48,27 @@ def run(input_path, input_validation_path, output_path, profile_name, train_auto
     # Запоминаем выбранный профиль, чтобы инференс-скрипты сами подхватили
     # правильный DSL mapping и eval_set из sidecar-файла.
     dataset_profiles.save(output_path, profile_name)
+    with open(os.path.join(output_path, "training_run_config.json"), "w") as destination:
+        json.dump({
+            "profile": profile_name,
+            "training_set": input_path,
+            "eval_set": input_validation_path,
+            "train_autoencoder": train_autoencoder,
+            "train_steps_fraction": train_steps_fraction,
+            "seed": random_seed,
+        }, destination, indent=2)
+        destination.write("\n")
 
     gui_paths, img_paths = Dataset.load_paths_only(input_path)
 
     input_shape = dataset.input_shape
     output_size = dataset.output_size
-    steps_per_epoch = int(dataset.size / BATCH_SIZE)
+    full_steps_per_epoch = max(1, int(dataset.size / BATCH_SIZE))
+    if train_steps_fraction <= 0 or train_steps_fraction > 1:
+        raise SystemExit("train_steps_fraction must be in (0, 1], got {}".format(train_steps_fraction))
+    steps_per_epoch = max(1, int(full_steps_per_epoch * train_steps_fraction))
+    print("[train] steps_per_epoch={} (fraction={} from full {})".format(
+        steps_per_epoch, train_steps_fraction, full_steps_per_epoch), flush=True)
 
     voc = Vocabulary()
     voc.retrieve(output_path)
@@ -143,6 +155,10 @@ def _parse_args(argv):
                         help="dataset profile name (see classes/dataset/profiles.py). Default: web.")
     parser.add_argument("--train-autoencoder", action="store_true",
                         help="train the autoencoder before the main model")
+    parser.add_argument("--steps-fraction", type=float, default=None,
+                        help="fraction of training batches per epoch; defaults to the selected profile setting")
+    parser.add_argument("--seed", type=int, default=1234,
+                        help="random seed for NumPy and TensorFlow; stored with the trained checkpoint")
     parser.add_argument("paths", nargs="*",
                         help="(legacy) <training_set> <eval_set> <output_path> [autoencoder_flag]")
     args = parser.parse_args(argv)
@@ -153,6 +169,7 @@ def _parse_args(argv):
         val_path    = args.paths[1]
         output_path = args.paths[2]
         train_autoencoder = (len(args.paths) >= 4 and str(args.paths[3]) == "1") or args.train_autoencoder
+        train_steps_fraction = args.steps_fraction if args.steps_fraction is not None else 1.0
         # We don't know which profile this corresponds to — best-effort match by training_set path,
         # else fall back to "web". The sidecar's main purpose is to tell inference scripts which
         # DSL mapping to use; mis-tagging only matters if the legacy caller is using a non-default set.
@@ -167,14 +184,20 @@ def _parse_args(argv):
         profile = dataset_profiles.get(profile_name)
         input_path  = profile["training_set"]
         val_path    = profile["eval_set"]
-        output_path = DEFAULT_OUTPUT_PATH
+        output_path = profile["output_dir"]
         train_autoencoder = args.train_autoencoder
+        train_steps_fraction = (
+            args.steps_fraction
+            if args.steps_fraction is not None
+            else profile.get("train_steps_fraction", 1.0)
+        )
 
-    return input_path, val_path, output_path, profile_name, train_autoencoder
+    return input_path, val_path, output_path, profile_name, train_autoencoder, train_steps_fraction, args.seed
 
 
 if __name__ == "__main__":
-    input_path, input_validation_path, output_path, profile_name, train_autoencoder = _parse_args(sys.argv[1:])
-    print("Training with profile={!r}: input={} val={} output={} train_autoencoder={}".format(
-        profile_name, input_path, input_validation_path, output_path, train_autoencoder))
-    run(input_path, input_validation_path, output_path, profile_name, train_autoencoder=train_autoencoder)
+    input_path, input_validation_path, output_path, profile_name, train_autoencoder, train_steps_fraction, seed = _parse_args(sys.argv[1:])
+    print("Training with profile={!r}: input={} val={} output={} train_autoencoder={} steps_fraction={} seed={}".format(
+        profile_name, input_path, input_validation_path, output_path, train_autoencoder, train_steps_fraction, seed))
+    run(input_path, input_validation_path, output_path, profile_name, train_autoencoder=train_autoencoder,
+        train_steps_fraction=train_steps_fraction, random_seed=seed)

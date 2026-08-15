@@ -13,12 +13,16 @@ class Compiler:
 
         self.root = Node("body", None, self.content_holder)
 
+    @staticmethod
+    def _normalize_token(token):
+        return ''.join(token.split())
+
     def compile(self, input_file_path, output_file_path, rendering_function=None):
         dsl_file = open(input_file_path)
         current_parent = self.root
 
         for token in dsl_file:
-            token = token.replace(" ", "").replace("\n", "")
+            token = self._normalize_token(token)
 
             if token.find(self.opening_tag) != -1:
                 token = token.replace(self.opening_tag, "")
@@ -43,7 +47,7 @@ class Compiler:
         current_parent = self.root
 
         for token in prediction.splitlines():
-            token = token.replace(" ", "").replace("\n", "")
+            token = self._normalize_token(token)
             if token == "":
                 continue
 

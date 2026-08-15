@@ -3,6 +3,7 @@ __author__ = 'Taneem Jan, taneemishere.github.io'
 
 import keras.src.callbacks
 import datetime
+import os
 from keras.layers import (Input, MaxPooling2D, Conv2DTranspose, Reshape, Dense,
                           MaxPooling2D, BatchNormalization, ReLU, Rescaling, Normalization)
 from keras.models import Sequential, Model
@@ -33,10 +34,12 @@ class autoencoder_image(AModel):
 			axis=-1, mean=IMAGENET_BGR_MEAN, variance=[1.0, 1.0, 1.0],
 			name='imagenet_mean_subtract')(scaled)
 
-		# (#5) Инициализация весами ImageNet вместо случайных: ResNet50 с нуля на ~1500
-		# изображениях не обучить, а предобученные фильтры дают сильный старт (дальше
-		# дообучается на наших данных при обучении автоэнкодера).
-		base_model = ResNet50(weights='imagenet', input_tensor=preprocessed, input_shape=input_shape, include_top=False)
+		# (#5) Инициализация весами ImageNet вместо случайных нужна при первом обучении
+		# автоэнкодера. Для инференса/оценки, когда локальные веса уже есть, не ходим
+		# в сеть за ImageNet-весами: модель сразу после сборки загрузит resnet50.weights.h5.
+		local_weights_path = "{}/resnet50.weights.h5".format(output_path)
+		resnet_initial_weights = None if os.path.isfile(local_weights_path) else 'imagenet'
+		base_model = ResNet50(weights=resnet_initial_weights, input_tensor=preprocessed, input_shape=input_shape, include_top=False)
 		# (opt #2) Именуем верхний слой энкодера, чтобы Main_Model мог тапнуть его
 		# напрямую и получить (8, 8, 512) = 64 региона вместо (4, 4, 512) = 16
 		# после MaxPooling. Реконструкция автоэнкодера всё ещё идёт через бутылочное
@@ -93,7 +96,7 @@ class autoencoder_image(AModel):
 			verbose=1,
 			save_freq='epoch'
 		)
-		self.model.fit(generator, steps_per_epoch=steps_per_epoch, epochs=10, verbose=1, callbacks=[model_checkpoint_callback, *callbacks])
+		self.model.fit(generator, steps_per_epoch=steps_per_epoch, epochs=15, verbose=1, callbacks=[model_checkpoint_callback, *callbacks])
 		self.save()
 		self.encoder.save('resnet50_encoder.weights.h5')
 

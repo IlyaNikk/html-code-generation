@@ -18,24 +18,23 @@ from ..test_classes.BLEU import *
 # Эта строка делает финальное связывание `Utils` именно с нужным.
 from ..Utils import Utils
 
-# Веса (а значит и активный профиль датасета) живут здесь. DSL_PATH и input_path
-# теперь резолвятся через profiles.load() — никаких хардкодов под конкретный сет.
-trained_weights_path = "bin/web"
-logs_path = "resources/logs.txt"
-
-
 class TestingCallback(keras.callbacks.Callback):
+    def __init__(self, trained_weights_path, logs_path=None):
+        super().__init__()
+        self.trained_weights_path = trained_weights_path
+        self.logs_path = logs_path or os.path.join(trained_weights_path, "testing_callback_logs.txt")
+
     def on_epoch_end(self, epoch, logs=None):
-        meta_dataset = np.load("{}/meta_dataset.npy".format(trained_weights_path), allow_pickle=True)
+        meta_dataset = np.load("{}/meta_dataset.npy".format(self.trained_weights_path), allow_pickle=True)
         input_shape = meta_dataset[0]
         output_size = meta_dataset[1]
 
         # Resolve dataset-specific paths from the sidecar written by train.py.
-        profile = dataset_profiles.load(trained_weights_path)
+        profile = dataset_profiles.load(self.trained_weights_path)
         dsl_path = profile["dsl_mapping"]
         input_path = profile["eval_set"]
 
-        sampler = Sampler(trained_weights_path, input_shape, output_size, CONTEXT_LENGTH)
+        sampler = Sampler(self.trained_weights_path, input_shape, output_size, CONTEXT_LENGTH)
         compiler = Compiler(dsl_path)
 
         functional_test_instance = FunctionalTest(self.model, sampler, compiler, input_path)
@@ -55,7 +54,7 @@ class TestingCallback(keras.callbacks.Callback):
         print("\n[TestingCallback] epoch {} — evaluating on {} files from {}".format(
             epoch + 1, n_files, input_path), flush=True)
 
-        with open(logs_path, 'a') as file_to_write:
+        with open(self.logs_path, 'a') as file_to_write:
             for idx, file in enumerate(gui_files, start=1):
                 file_start = time.time()
                 gui_name = file.replace(".gui", "")

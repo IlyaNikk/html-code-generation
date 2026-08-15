@@ -222,7 +222,7 @@ class Main_Model(AModel):
         # self.model.load_weights(checkpoint_file_name)
         # loss, acc = self.model.evaluate(generator)
         # print("Restored model, accuracy: {:5.2f}%".format(100 * acc))
-        testing_callback = TestingCallback()
+        testing_callback = TestingCallback(self.output_path)
         keras.utils.plot_model(
             self.model, to_file='se2seq_resnet.png', show_shapes=True, show_layer_names=True,
             rankdir='TB', expand_nested=True, dpi=96
