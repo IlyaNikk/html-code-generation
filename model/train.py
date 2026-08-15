@@ -17,6 +17,7 @@ when you switch datasets.
 """
 
 import argparse
+import json
 import os
 import tensorflow as tf
 
@@ -36,8 +37,9 @@ from tensorflow.keras.callbacks import TensorBoard
 
 
 def run(input_path, input_validation_path, output_path, profile_name, train_autoencoder=False,
-        train_steps_fraction=1.0):
-    np.random.seed(1234)
+        train_steps_fraction=1.0, random_seed=1234):
+    np.random.seed(random_seed)
+    tf.random.set_seed(random_seed)
 
     dataset = Dataset()
     dataset.load(input_path, generate_binary_sequences=True)
@@ -46,6 +48,16 @@ def run(input_path, input_validation_path, output_path, profile_name, train_auto
     # Запоминаем выбранный профиль, чтобы инференс-скрипты сами подхватили
     # правильный DSL mapping и eval_set из sidecar-файла.
     dataset_profiles.save(output_path, profile_name)
+    with open(os.path.join(output_path, "training_run_config.json"), "w") as destination:
+        json.dump({
+            "profile": profile_name,
+            "training_set": input_path,
+            "eval_set": input_validation_path,
+            "train_autoencoder": train_autoencoder,
+            "train_steps_fraction": train_steps_fraction,
+            "seed": random_seed,
+        }, destination, indent=2)
+        destination.write("\n")
 
     gui_paths, img_paths = Dataset.load_paths_only(input_path)
 
@@ -145,6 +157,8 @@ def _parse_args(argv):
                         help="train the autoencoder before the main model")
     parser.add_argument("--steps-fraction", type=float, default=None,
                         help="fraction of training batches per epoch; defaults to the selected profile setting")
+    parser.add_argument("--seed", type=int, default=1234,
+                        help="random seed for NumPy and TensorFlow; stored with the trained checkpoint")
     parser.add_argument("paths", nargs="*",
                         help="(legacy) <training_set> <eval_set> <output_path> [autoencoder_flag]")
     args = parser.parse_args(argv)
@@ -178,12 +192,12 @@ def _parse_args(argv):
             else profile.get("train_steps_fraction", 1.0)
         )
 
-    return input_path, val_path, output_path, profile_name, train_autoencoder, train_steps_fraction
+    return input_path, val_path, output_path, profile_name, train_autoencoder, train_steps_fraction, args.seed
 
 
 if __name__ == "__main__":
-    input_path, input_validation_path, output_path, profile_name, train_autoencoder, train_steps_fraction = _parse_args(sys.argv[1:])
-    print("Training with profile={!r}: input={} val={} output={} train_autoencoder={} steps_fraction={}".format(
-        profile_name, input_path, input_validation_path, output_path, train_autoencoder, train_steps_fraction))
+    input_path, input_validation_path, output_path, profile_name, train_autoencoder, train_steps_fraction, seed = _parse_args(sys.argv[1:])
+    print("Training with profile={!r}: input={} val={} output={} train_autoencoder={} steps_fraction={} seed={}".format(
+        profile_name, input_path, input_validation_path, output_path, train_autoencoder, train_steps_fraction, seed))
     run(input_path, input_validation_path, output_path, profile_name, train_autoencoder=train_autoencoder,
-        train_steps_fraction=train_steps_fraction)
+        train_steps_fraction=train_steps_fraction, random_seed=seed)

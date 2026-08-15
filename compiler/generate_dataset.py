@@ -1,3 +1,4 @@
+import argparse
 import json
 import random
 import os
@@ -20,29 +21,33 @@ NEW_LINE = "\n"
 ALL_CHILDREN_RESTRICTION = "allChildren"
 ONLY_ONE_CHILD_RESTRICTION = "onlyOneChild"
 SKIP_RESTRICTION = "skip"
-OUTPUT_DIRECTORY = '{}/datasets/generated/web/article'.format(os.getcwd())
-FAILED_DIRECTORY = '{}/failed'.format(OUTPUT_DIRECTORY)
-FAILED_LOG_PATH = '{}/failed_samples.log'.format(OUTPUT_DIRECTORY)
+DEFAULT_OUTPUT_DIRECTORY = '{}/datasets/generated/web/article'.format(os.getcwd())
 RENDER_TIMEOUT_MS = 60000
 BLANK_IMAGE_MAX_CHANNEL_VALUE = 250
 
-argv = sys.argv[1:]
+OUTPUT_DIRECTORY = DEFAULT_OUTPUT_DIRECTORY
+FAILED_DIRECTORY = None
+FAILED_LOG_PATH = None
 
-if len(argv) < 1:
-    print("Error")
-    exit(0)
-elif argv[0] == "--retry-failed":
-    count_iterations = 0
-    retry_failed_mode = True
-    rerender_blank_mode = False
-elif argv[0] == "--rerender-blank":
-    count_iterations = 0
-    retry_failed_mode = False
-    rerender_blank_mode = True
-else:
-    count_iterations = int(argv[0])
-    retry_failed_mode = len(argv) > 1 and argv[1] == "--retry-failed"
-    rerender_blank_mode = len(argv) > 1 and argv[1] == "--rerender-blank"
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic screenshot/DSL pairs with an optional reproducible seed."
+    )
+    parser.add_argument("count", nargs="?", type=int, help="number of successful samples to generate")
+    parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument("--rerender-blank", action="store_true")
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIRECTORY)
+    parser.add_argument("--seed", type=int, default=None)
+    args = parser.parse_args(argv)
+    if args.retry_failed and args.rerender_blank:
+        parser.error("--retry-failed and --rerender-blank are mutually exclusive")
+    if not args.retry_failed and not args.rerender_blank:
+        if args.count is None or args.count <= 0:
+            parser.error("count must be a positive integer when generating samples")
+    elif args.count is not None:
+        parser.error("count cannot be used with --retry-failed or --rerender-blank")
+    return args
 
 def update_progress(count, total):
     bar_len = 60
@@ -55,12 +60,11 @@ def update_progress(count, total):
     sys.stdout.flush()
 
 class Generate_Dataset():
-    def __init__(self):
+    def __init__(self, name=None):
         self.result = ''
         self.result_tree = []
-        self.name = uuid.uuid4()
+        self.name = name or uuid.uuid4()
         self.compiler = Compiler(dsl_mapping_file_path)
-        random.seed()
 
         with open(dsl_mapping_file_path) as data_file:
             self.dsl_elements = json.load(data_file)
@@ -305,38 +309,76 @@ def rerender_blank_samples():
         rerendered_count, failed_count))
 
 
-if retry_failed_mode:
-    retry_failed_samples()
-    exit(0)
+def deterministic_name(seed, attempt):
+    return uuid.uuid5(uuid.NAMESPACE_URL, "web-generated:{}:{}".format(seed, attempt))
 
-if rerender_blank_mode:
-    rerender_blank_samples()
-    exit(0)
 
-update_progress(0, count_iterations)
+def write_generation_manifest(args, successful_samples, attempts):
+    manifest_path = os.path.join(OUTPUT_DIRECTORY, "generation_manifest.json")
+    with open(manifest_path, "w") as destination:
+        json.dump({
+            "generator": "compiler/generate_dataset.py",
+            "seed": args.seed,
+            "requested_samples": args.count,
+            "successful_samples": successful_samples,
+            "attempts": attempts,
+        }, destination, indent=2)
+        destination.write("\n")
+    print("[generate_dataset] manifest={}".format(manifest_path))
 
-success_count = 0
-attempt_count = 0
-max_attempts = count_iterations * 3
 
-while success_count < count_iterations and attempt_count < max_attempts:
-    attempt_count += 1
-    generateModel = Generate_Dataset()
-    generateModel.generate()
-    generateModel.convert_to_string()
+def main(argv):
+    global OUTPUT_DIRECTORY, FAILED_DIRECTORY, FAILED_LOG_PATH
+    args = parse_args(argv)
+    OUTPUT_DIRECTORY = os.path.abspath(args.output_dir)
+    FAILED_DIRECTORY = '{}/failed'.format(OUTPUT_DIRECTORY)
+    FAILED_LOG_PATH = '{}/failed_samples.log'.format(OUTPUT_DIRECTORY)
+    random.seed(args.seed)
 
-    if generateModel.generate_picture():
-        generateModel.get_final_result()
-        success_count += 1
-    else:
-        print('[generate_dataset] skipped failed sample {}; saved to {}'.format(
-            generateModel.name, FAILED_DIRECTORY), flush=True)
+    if args.retry_failed:
+        retry_failed_samples()
+        return
+    if args.rerender_blank:
+        rerender_blank_samples()
+        return
 
-    update_progress(success_count, count_iterations)
+    if os.path.isdir(OUTPUT_DIRECTORY) and os.listdir(OUTPUT_DIRECTORY):
+        raise SystemExit(
+            "refusing to mix a new dataset into non-empty output directory: {}".format(OUTPUT_DIRECTORY)
+        )
 
-print('\n[generate_dataset] generated {} successful samples after {} attempts'.format(
-    success_count, attempt_count))
+    update_progress(0, args.count)
+    successful_samples = []
+    success_count = 0
+    attempt_count = 0
+    max_attempts = args.count * 3
 
-if success_count < count_iterations:
-    print('[generate_dataset] stopped before target after too many failed attempts; failed samples are in {}'.format(
-        FAILED_DIRECTORY))
+    while success_count < args.count and attempt_count < max_attempts:
+        attempt_count += 1
+        name = deterministic_name(args.seed, attempt_count) if args.seed is not None else None
+        generateModel = Generate_Dataset(name=name)
+        generateModel.generate()
+        generateModel.convert_to_string()
+
+        if generateModel.generate_picture():
+            generateModel.get_final_result()
+            successful_samples.append(str(generateModel.name))
+            success_count += 1
+        else:
+            print('[generate_dataset] skipped failed sample {}; saved to {}'.format(
+                generateModel.name, FAILED_DIRECTORY), flush=True)
+
+        update_progress(success_count, args.count)
+
+    print('\n[generate_dataset] generated {} successful samples after {} attempts'.format(
+        success_count, attempt_count))
+    write_generation_manifest(args, successful_samples, attempt_count)
+
+    if success_count < args.count:
+        print('[generate_dataset] stopped before target after too many failed attempts; failed samples are in {}'.format(
+            FAILED_DIRECTORY))
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

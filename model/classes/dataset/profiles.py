@@ -33,6 +33,13 @@ PROFILES = {
         # full-step article runs.
         "train_steps_fraction": 0.5,
     },
+    "web_generated_replication_v1": {
+        "training_set": "datasets/generated/web/replication_v1/training_set",
+        "eval_set":     "datasets/generated/web/replication_v1/eval_set",
+        "dsl_mapping":  "compiler/assets/web-dsl-mapping-new.json",
+        "output_dir":   "bin/web/correct/replication_v1/supervised",
+        "train_steps_fraction": 0.5,
+    },
 }
 
 _SIDECAR = "training_profile.txt"
